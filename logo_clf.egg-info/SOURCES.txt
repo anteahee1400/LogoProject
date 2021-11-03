@@ -1,0 +1,5 @@
+setup.py
+logo_clf.egg-info/PKG-INFO
+logo_clf.egg-info/SOURCES.txt
+logo_clf.egg-info/dependency_links.txt
+logo_clf.egg-info/top_level.txt
