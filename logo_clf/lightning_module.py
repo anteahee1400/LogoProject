@@ -3,8 +3,8 @@ import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import torchmetrics
-from model.efficientnet_pretrained import *
-from metric import *
+from logo_clf.model.efficientnet_pretrained import *
+from logo_clf.metric import *
 
 
 class LogoLightningModule(pl.LightningModule):
@@ -61,7 +61,7 @@ class LogoLightningModule(pl.LightningModule):
         x, y = test_batch
         y_ = self.model.forward(x)
 
-        loss = self.calculate_loss(y_, y)
+        loss = self.calculate_test_loss(y_, y)
         evaluation = self.calculate_evaluation(y_, y, self.device)
 
         for key in evaluation.keys():
@@ -82,6 +82,7 @@ class LogoLightningModule(pl.LightningModule):
     def _setup_configure(self):
         self.model = self.configure_model()
         self.loss_func = self.configure_loss()
+        self.test_loss_func = torch.nn.BCEWithLogitsLoss()
         self.eval_funcs = self.configure_evaluation()
 
     def configure_model(self):
@@ -126,15 +127,17 @@ class LogoLightningModule(pl.LightningModule):
 
     def calculate_loss(self, predicted, answer):
         pred = predicted.view(-1, predicted.shape[-1])
-        ans = answer.view(-1)
-        return self.loss_func(pred, ans)
+        return self.loss_func(pred, answer)
+
+    def calculate_test_loss(self, predicted, answer):
+        pred = predicted.view(-1, predicted.shape[-1])
+        return self.test_loss_func(pred, answer)
 
     def calculate_evaluation(self, predicted, answer, device="cpu"):
         evaluations = dict()
         for idx, metric in enumerate(self.eval_funcs):
             key = metric.__class__.__name__.lower() + str(idx)
             pred = predicted.view(-1, predicted.shape[-1])
-            prob = F.softmax(pred)
-            ans = answer.view(-1)
-            evaluations[key] = metric.to(device)(prob, ans)
+            prob = F.softmax(pred, dim=1)
+            evaluations[key] = metric.to(device)(prob, answer.long())
         return evaluations

@@ -1,4 +1,5 @@
 import argparse
+import pandas as pd
 from utils import read_yaml, update_config
 
 import pytorch_lightning as pl
@@ -11,7 +12,8 @@ from lightning_module import LogoLightningModule
 
 def test(config, wandb=False, ckpt=None):
     lightning_module = LogoLightningModule(config['lightning_module'])
-    lightning_module = lightning_module.load_from_checkpoint(checkpoint_path=ckpt)
+    if ckpt is not None:
+        lightning_module = lightning_module.load_from_checkpoint(checkpoint_path=ckpt)
     datamodule = LogoDataModule(config['datamodule'])
     trainer_params = config['trainer']
 
@@ -24,7 +26,8 @@ def test(config, wandb=False, ckpt=None):
         trainer_params.update({'logger': wandb_logger})
     
     trainer = pl.Trainer(callbacks=callbacks, **trainer_params)
-    trainer.test(lightning_module, datamodule)
+    result = trainer.test(lightning_module, datamodule)
+    return result
 
 
 if __name__ == "__main__":
@@ -46,4 +49,6 @@ if __name__ == "__main__":
     else:
         config['trainer']['gpus'] = int(args.device)
     
-    test(config, args.wandb, args.ckpt)
+    result = test(config, args.wandb, args.ckpt)
+    pd.DataFrame.from_dict(result).to_csv("result.csv")
+    

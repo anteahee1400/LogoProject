@@ -43,7 +43,11 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
         self.split = split
         self.random_split = random_split
 
-        self.label_df = pd.read_csv(label_path) if label_path is not None else None
+        self.label_df = (
+            pd.read_csv(label_path, low_memory=False)
+            if label_path is not None
+            else None
+        )
         if self.label_df is not None:
             self.do_split()
             self.do_sort()

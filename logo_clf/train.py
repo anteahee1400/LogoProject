@@ -23,7 +23,7 @@ def train(config, wandb=False):
         wandb_callback = LogoImageCallback(datamodule, label_path=config['datamodule']['dataset']['label_path'], data_path=config['datamodule']['dataset']['data_path'])
         callbacks.append(wandb_callback)
 
-        wandb_logger = WandbLogger(project="Logo_vienna_code_classification")
+        wandb_logger = WandbLogger(project="Logo_vienna_code_classification", name="sanity_check")
         trainer_params.update({'logger': wandb_logger})
     
     trainer = pl.Trainer(callbacks=callbacks, **trainer_params)
