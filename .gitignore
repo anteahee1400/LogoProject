@@ -6,7 +6,10 @@
 **/__pycache__
 **/__pycache__/*
 /logo_clf.egg-info
+/logo_clf/lightning_logs
 /logo_clf/lightning_logs/*
 /logo_clf/*.csv
 /logo_clf/*.pt
 /logo_clf/*.ipynb
+/logo_clf/wandb
+/logo_clf/wandb/*
