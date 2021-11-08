@@ -6,6 +6,7 @@
 **/__pycache__
 **/__pycache__/*
 /logo_clf.egg-info
+/logo_clf/*/__pycache__
 /logo_clf/lightning_logs
 /logo_clf/lightning_logs/*
 /logo_clf/*.csv
