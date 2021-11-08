@@ -13,13 +13,13 @@ from lightning_module import LogoLightningModule
 def test(config, wandb=False, ckpt=None):
     lightning_module = LogoLightningModule(config['lightning_module'])
     if ckpt is not None:
-        lightning_module = lightning_module.load_from_checkpoint(checkpoint_path=ckpt)
+        lightning_module.load_from_checkpoint(checkpoint_path=ckpt)
     datamodule = LogoDataModule(config['datamodule'])
     trainer_params = config['trainer']
     wandb_logger_setting = trainer_params.pop("wandb_logger")
     callbacks = []
     if wandb:
-        wandb_callback = LogoImageCallback(datamodule, label_path='/home/ubuntu/datasets/LOGO/Logo_clf/meta.csv', data_path=config['datamodule']['dataset']['data_path'])
+        wandb_callback = LogoImageCallback(datamodule, label_path=config['datamodule']['dataset']['label_path'], data_path=config['datamodule']['dataset']['data_path'])
         callbacks.append(wandb_callback)
 
         wandb_logger = WandbLogger(**wandb_logger_setting)

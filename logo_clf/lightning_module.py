@@ -13,6 +13,12 @@ class LogoLightningModule(pl.LightningModule):
         self.config = config
         self._setup_configure()
 
+    def load_from_checkpoint(self, checkpoint_path):
+        loaded = torch.load(checkpoint_path, map_location="cpu")
+        self.model.load_state_dict(
+            {k.replace("model.", ""): v for k, v in loaded["state_dict"].items()}
+        )
+
     def training_step(self, train_batch, batch_idx):
         x, y = train_batch
         y_ = self.model.forward(x)
