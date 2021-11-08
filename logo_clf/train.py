@@ -13,7 +13,7 @@ def train(config, wandb=False):
     lightning_module = LogoLightningModule(config['lightning_module'])
     datamodule = LogoDataModule(config['datamodule'])
     trainer_params = config['trainer']
-
+    wandb_logger_setting = trainer_params.pop("wandb_logger")
     callbacks = []
     ckpt_callback = checkpoint_callback(
         dir_path="ckpt", monitor="avg_val_loss", save_top_k=-1
@@ -23,7 +23,7 @@ def train(config, wandb=False):
         wandb_callback = LogoImageCallback(datamodule, label_path=config['datamodule']['dataset']['label_path'], data_path=config['datamodule']['dataset']['data_path'])
         callbacks.append(wandb_callback)
 
-        wandb_logger = WandbLogger(project="Logo_vienna_code_classification", name="sanity_check")
+        wandb_logger = WandbLogger(**wandb_logger_setting)
         trainer_params.update({'logger': wandb_logger})
     
     trainer = pl.Trainer(callbacks=callbacks, **trainer_params)

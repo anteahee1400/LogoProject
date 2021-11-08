@@ -1,4 +1,5 @@
 import os
+from random import shuffle
 import pandas as pd
 from pathlib import Path
 from PIL import Image
@@ -12,12 +13,22 @@ from logo_clf.utils import read_json
 from logo_clf.visualization.gradcam import *
 
 
+def split_multi_hot(label):
+    batch_ids, batch_labels = torch.where(label == 1)
+    labels = [[] for _ in range(label.shape[0])]
+    for i, idx in enumerate(batch_ids):
+        labels[idx].append(batch_labels[i])
+    labels = [torch.stack(l) for l in labels]
+    max_len = max([len(l) for l in labels])
+    return labels, max_len
+
+
 class WandbCallback(pl.Callback):
     def __init__(self, datamodule, num_samples=32, **kwargs):
         super().__init__()
         datamodule.setup()
-        val_samples = next(iter(datamodule.val_dataloader()))
-        test_samples = next(iter(datamodule.test_dataloader()))
+        val_samples = next(iter(datamodule.val_dataloader(shuffle=True)))
+        test_samples = next(iter(datamodule.test_dataloader(shuffle=True)))
         self.num_samples = num_samples
         self.val_imgs, self.val_labels = val_samples
         self.test_imgs, self.test_labels = test_samples
@@ -136,8 +147,8 @@ class LogoImageCallback(WandbImageCallback):
         self.img_mapper = self.load_img_mapper()
         self.k = k
         self.data_path = Path(data_path)
-        if self.data_path.name != 'train_folder':
-            self.data_path = self.data_path / 'train_folder'
+        if self.data_path.name != "train_folder":
+            self.data_path = self.data_path / "train_folder"
         self.default_imgpath = "x.jpg"
 
     def load_mapper(self, path):
@@ -203,12 +214,13 @@ class LogoImageCallback(WandbImageCallback):
             },
             commit=False,
         )
-    
+
     def on_test_epoch_end(self, trainer, pl_module):
         test_imgs = self.test_imgs.to(device=pl_module.device)
         test_labels = self.test_labels.to(device=pl_module.device)
+        max_len = 1
         if len(test_labels.shape) == 2:
-            test_labels = test_labels.argmax(dim=1)
+            test_labels, max_len = split_multi_hot(test_labels)
 
         logits = pl_module.model.forward(test_imgs)
 
@@ -226,8 +238,11 @@ class LogoImageCallback(WandbImageCallback):
         )
 
         # table
+        columns = ["image"]
+        for i in range(max_len):
+            columns.append(f"label{i}")
         test_table = self.log_table(
-            test_imgs, test_labels, logits, columns=["image", "label"], k=self.k
+            test_imgs, test_labels, logits, columns=columns, k=self.k
         )
 
         trainer.logger.experiment.log(
@@ -240,29 +255,48 @@ class LogoImageCallback(WandbImageCallback):
         )
 
     def log_table(self, real_imgs, labels, outputs, columns=["image", "label"], k=5):
-        labels = [self.mapper.get(str(l), "none") for l in labels.cpu().numpy()]
+        if isinstance(labels, list):
+            labels = [
+                [self.mapper.get(str(l), "none") for l in label.cpu().numpy()]
+                for label in labels
+            ]
+        else:
+            labels = [self.mapper.get(str(l), "none") for l in labels.cpu().numpy()]
         scores = torch.nn.functional.softmax(outputs, dim=-1)
         batch_k_probs = scores.sort(dim=1, descending=True).values[:, :k].cpu().numpy()
         batch_k_preds = scores.argsort(dim=1, descending=True)[:, :k].cpu().numpy()
         batch_k_predimgs = [self.get_imgs_from_mapper(preds) for preds in batch_k_preds]
 
         batch_k_wandbimgs = []
-        for preds, lists_of_imgs in zip(batch_k_preds, batch_k_predimgs):
+        for preds, probs, lists_of_imgs in zip(
+            batch_k_preds, batch_k_probs, batch_k_predimgs
+        ):
             batch_k_wandbimgs.append(
                 [
-                    (self.mapper.get(str(l), str(l)), wandb.Image(im[0]))
-                    for l, im in zip(preds, lists_of_imgs)
+                    (
+                        self.mapper.get(str(l), str(l)),
+                        f"{round(p*100, 3)}%",
+                        wandb.Image(im[0]),
+                    )
+                    for l, p, im in zip(preds, probs, lists_of_imgs)
                 ]
             )
 
+        col_len = len(columns)
         for i in range(k):
             columns.append(f"pred_{i}_label")
+            columns.append(f"pred_{i}_prob")
             columns.append(f"pred_{i}_image")
 
         all_data = []
-        for i, l, limlist in zip(real_imgs, labels, batch_k_wandbimgs):
-            data = [wandb.Image(i), l]
-            for p, w in limlist:
+        for img, label, limlist in zip(real_imgs, labels, batch_k_wandbimgs):
+            if isinstance(label, list):
+                data = [wandb.Image(img), *label]
+                data.extend(["x"] * (col_len - len(data)))
+            else:
+                data = [wandb.Image(img), label]
+            for k, p, w in limlist:
+                data.append(k)
                 data.append(p)
                 data.append(w)
             all_data.append(data)
@@ -272,7 +306,6 @@ class LogoImageCallback(WandbImageCallback):
             data=all_data,
         )
         return test_table
-
 
 
 class LogoObjCallback(LogoImageCallback):
@@ -397,4 +430,3 @@ class LogoObjCallback(LogoImageCallback):
             },
         )
         return box_image
-

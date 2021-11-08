@@ -7,3 +7,13 @@ datamodule:
       - transforms.RandomGrayscale(p=0.2)
       - transforms.ToTensor()
       - transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+  dataloader:
+    num_workers: 16
+    batch_size: 100
+
+lightning_module:
+  model:
+    name: efficientnet_b4_pretrained
+    kwargs:
+      num_classes: 392
+    ckpt: /home/ubuntu/yha/AutoTrainer/autotrainer/working/logo_project/logo_clf/b4/1/results/train/ckpt/epoch=001-avg_val_loss=1.7310.ckpt

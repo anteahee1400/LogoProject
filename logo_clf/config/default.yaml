@@ -63,3 +63,6 @@ trainer:
   auto_lr_find: False
   auto_scale_batch_size: False
   move_metrics_to_cpu: False
+  wandb_logger:
+    project: Logo_vienna_code_classification
+    name: initial
