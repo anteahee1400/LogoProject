@@ -7,3 +7,6 @@
 **/__pycache__/*
 /logo_clf.egg-info
 /logo_clf/lightning_logs/*
+/logo_clf/*.csv
+/logo_clf/*.pt
+/logo_clf/*.ipynb
