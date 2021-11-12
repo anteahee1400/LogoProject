@@ -1,7 +1,8 @@
 import json
 import yaml
 import inspect
-
+import pandas as pd
+import tqdm
 
 def read_yaml(path):
     """ """
@@ -70,3 +71,27 @@ def update_config(default, path):
             default["trainer"][k] = trainer[k]
 
     return default
+
+
+def make_cv_meta_files(train_df, val_df):
+    dfs = []
+    for i in range(4):
+        df = set_split_by_index(train_df, i)
+        val_df["split"] = "train"
+        df = pd.concat([df, val_df]).reset_index(drop=True)
+        dfs.append(df)
+    return dfs
+
+
+def set_split_by_index(train_df, idx):
+    split = []
+    for i in tqdm.tqdm(range(train_df.shape[0])):
+        if i % 4 == idx:
+            split.append("val")
+        else:
+            split.append("train")
+    train_df["split"] = split
+    dfs = []
+    for s in ["train", "val"]:
+        dfs.append(train_df[train_df.split == s].reset_index(drop=True))
+    return pd.concat(dfs).reset_index(drop=True)
