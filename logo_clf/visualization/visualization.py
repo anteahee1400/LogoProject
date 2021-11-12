@@ -80,24 +80,38 @@ def class_balance(df, class_name="code_s", visual=False):
         bar(df, "Class Distribution")
     return df
 
+
 def number_of_classes_by_image(df, visual=False):
     """
     check the distribution of the number of classes by image
-    Args: 
+    Args:
         df: data frame to use
         visual: if set True, the bar graph is displayed (default: False)
     Returns:
         grouped data frame (information of the number of classes, count of images, and the ratio of the number of classes)
     """
-    df = df.groupby('path').count().reset_index().sort_values('label', ascending=False).reset_index(drop=True)
-    df = df[['path', 'label']].rename(columns={'path':'count', 'label':'num_classes'})
-    df = df.groupby('num_classes').count().reset_index().sort_values('count', ascending=False).reset_index(drop=True)
-    df = df[['num_classes', 'count']]
-    df['percentage'] = df['count'] * 100 / df['count'].sum()
-    df['percentage'] = df['percentage'].apply(lambda x: f"{x:.02f}%")
+    df = (
+        df.groupby("path")
+        .count()
+        .reset_index()
+        .sort_values("label", ascending=False)
+        .reset_index(drop=True)
+    )
+    df = df[["path", "label"]].rename(columns={"path": "count", "label": "num_classes"})
+    df = (
+        df.groupby("num_classes")
+        .count()
+        .reset_index()
+        .sort_values("count", ascending=False)
+        .reset_index(drop=True)
+    )
+    df = df[["num_classes", "count"]]
+    df["percentage"] = df["count"] * 100 / df["count"].sum()
+    df["percentage"] = df["percentage"].apply(lambda x: f"{x:.02f}%")
     if visual:
         bar(df.head(10), "Number of Classes by Image", xlabel="num_classes")
     return df
+
 
 def average_width_and_height(df):
     """
@@ -129,15 +143,15 @@ def median_image_ratio(df):
     Returns:
         median of image width, median of image height
     """
-    df = df[['width', 'height']].describe()
-    return df.loc['50%'].width, df.loc['50%'].height
+    df = df[["width", "height"]].describe()
+    return df.loc["50%"].width, df.loc["50%"].height
 
 
 def dimension_insights():
     pass
 
 
-def annotation_heatmap(df, split='train', label='all'):
+def annotation_heatmap(df, split="train", label="all"):
     """
     draw annotation (bounding boxes of the target objects of images) heatmap
     Args:
@@ -145,35 +159,33 @@ def annotation_heatmap(df, split='train', label='all'):
         split: one of train, val, test, all (default: 'train')
         label: class name (default: 'all')
     Returns:
-        describtion (mean, minimum, maximum, 25%, 50%, 75% quantiles) of annotations
+        description (mean, minimum, maximum, 25%, 50%, 75% quantiles) of annotations
     """
-    if split != 'all':
-        df = df[df.split==split].reset_index(drop=True)
-    if label != 'all':
+    if split != "all":
+        df = df[df.split == split].reset_index(drop=True)
+    if label != "all":
         if isinstance(label, int):
-            df = df[df.label==label].reset_index(drop=True)
-        elif len(label)==6:
-            df = df[df.code_s==label].reset_index(drop=True)
-        elif len(label)==4:
-            df = df[df.code_m==label].reset_index(drop=True)
-        elif len(label)==2:
-            df = df[df.code_l==label].reset_index(drop=True)
-    annotations = df[['minX', 'minY', 'maxX', 'maxY']]
-    img  = np.zeros((416, 416, 3), np.uint8)
+            df = df[df.label == label].reset_index(drop=True)
+        elif len(label) == 6:
+            df = df[df.code_s == label].reset_index(drop=True)
+        elif len(label) == 4:
+            df = df[df.code_m == label].reset_index(drop=True)
+        elif len(label) == 2:
+            df = df[df.code_l == label].reset_index(drop=True)
+    annotations = df[["minX", "minY", "maxX", "maxY"]]
+    img = np.zeros((416, 416, 3), np.uint8)
     img = Image.fromarray(img)
-    rectangles = np.zeros_like(img)[:,:,0].astype('float32')
+    rectangles = np.zeros_like(img)[:, :, 0].astype("float32")
     for i, row in tqdm.tqdm(annotations.iterrows()):
-        x1 = int(row['minX'])
-        x2 = int(row['maxX'])
-        y1 = int(row['minY'])
-        y2 = int(row['maxY'])
-        rectangles[y1:y2, x1:x2]+=1
-        
-    
+        x1 = int(row["minX"])
+        x2 = int(row["maxX"])
+        y1 = int(row["minY"])
+        y2 = int(row["maxY"])
+        rectangles[y1:y2, x1:x2] += 1
+
     plt.figure(figsize=(10, 6))
     plt.title(f"Annotation Heatmap (split: {split}, label: {label})")
     plt.imshow(img)
     plt.imshow(rectangles, alpha=0.8)
     plt.show()
     return annotations.describe()
-
