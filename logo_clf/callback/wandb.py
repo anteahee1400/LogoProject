@@ -110,6 +110,8 @@ class WandbImageCallback(WandbCallback):
         torch.set_grad_enabled(True)
         gradcam = GradCam(model, target_layer=target_layer, fc_layer=fc_layer)
         for im, l in zip(imgs, labels):
+            if len(l) > 1:
+                l = l[0]
             x = im.unsqueeze(0)
             # x = Variable(x.data, requires_grad=True)
             cam = gradcam.generate_cam(x, l.item(), size=size)
@@ -159,7 +161,7 @@ class LogoImageCallback(WandbImageCallback):
             return {str(row["label"]): row["desc_s"] for i, row in df.iterrows()}
 
     def load_meta(self, path):
-        return pd.read_csv(path)
+        return pd.read_csv(path, low_memory=False)
 
     def load_img_mapper(self):
         df = self.meta
