@@ -1,5 +1,6 @@
 datamodule:
   dataset:
+    label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
     augmentations: 
       - null
     transforms:
