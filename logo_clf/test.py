@@ -21,8 +21,7 @@ def test(config, wandb=False, ckpt=None):
     if wandb:
         wandb_callback = LogoImageCallback(
             datamodule,
-            label_path=config["datamodule"]["dataset"]["label_path"],
-            data_path=config["datamodule"]["dataset"]["data_path"],
+            **config['callback']
         )
         callbacks.append(wandb_callback)
 
@@ -58,4 +57,5 @@ if __name__ == "__main__":
         config["trainer"]["gpus"] = int(args.device)
 
     result = test(config, args.wandb, args.ckpt)
-    pd.DataFrame.from_dict(result).to_csv("result.csv")
+    result_file = args.config.split('/')[-1].replace('.yaml', "")
+    pd.DataFrame.from_dict(result).to_csv(f"result/{result_file}.csv")

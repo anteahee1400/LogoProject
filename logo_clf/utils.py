@@ -56,6 +56,7 @@ def update_config(default, path):
     datamodule = update_dict.get("datamodule")
     lightning_module = update_dict.get("lightning_module")
     trainer = update_dict.get("trainer")
+    callback = update_dict.get("callback")
     if datamodule is not None:
         for k1 in datamodule.keys():
             for k2 in datamodule[k1].keys():
@@ -69,6 +70,10 @@ def update_config(default, path):
     if trainer is not None:
         for k in trainer.keys():
             default["trainer"][k] = trainer[k]
+    
+    if callback is not None:
+        for k in callback.keys():
+            default['callback'][k] = callback[k]
 
     return default
 
