@@ -1,5 +1,4 @@
 import os
-from random import shuffle
 import pandas as pd
 from pathlib import Path
 from PIL import Image
