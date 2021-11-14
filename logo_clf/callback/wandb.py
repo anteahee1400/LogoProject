@@ -23,12 +23,11 @@ def split_multi_hot(label):
 
 
 class WandbCallback(pl.Callback):
-    def __init__(self, datamodule, num_samples=32, **kwargs):
+    def __init__(self, datamodule, **kwargs):
         super().__init__()
         datamodule.setup()
         val_samples = next(iter(datamodule.val_dataloader(shuffle=True)))
         test_samples = next(iter(datamodule.test_dataloader(shuffle=True)))
-        self.num_samples = num_samples
         self.val_imgs, self.val_labels = val_samples
         self.test_imgs, self.test_labels = test_samples
 
@@ -66,6 +65,17 @@ class WandbCallback(pl.Callback):
 
 
 class WandbImageCallback(WandbCallback):
+    def __init__(
+        self,
+        datamodule,
+        target_layer="_blocks",
+        fc_layer="_fc",
+        **kwargs,
+    ):
+        super().__init__(datamodule)
+        self.target_layer = target_layer
+        self.fc_layer = fc_layer
+        
     def on_validation_epoch_end(self, trainer, pl_module):
         val_imgs = self.val_imgs.to(device=pl_module.device)
         val_labels = self.val_labels.to(device=pl_module.device)
@@ -81,8 +91,8 @@ class WandbImageCallback(WandbCallback):
             model,
             val_imgs,
             val_labels,
-            target_layer="_blocks",
-            fc_layer="_fc",
+            target_layer=self.target_layer,
+            fc_layer=self.fc_layer,
             size=224,
         )
 
@@ -122,9 +132,9 @@ class WandbImageCallback(WandbCallback):
         return [
             wandb.Image(x, caption=f"Pred:{pred}, Label:{y}")
             for x, pred, y in zip(
-                imgs[: self.num_samples],
-                preds[: self.num_samples],
-                labels[: self.num_samples],
+                imgs,
+                preds,
+                labels,
             )
         ]
 
@@ -133,7 +143,8 @@ class LogoImageCallback(WandbImageCallback):
     def __init__(
         self,
         datamodule,
-        num_samples=32,
+        target_layer="_blocks",
+        fc_layer="_fc",
         data_path=None,
         label_col="label",
         label_path=None,
@@ -141,7 +152,7 @@ class LogoImageCallback(WandbImageCallback):
         k=5,
         **kwargs,
     ):
-        super().__init__(datamodule, num_samples=num_samples)
+        super().__init__(datamodule, target_layer=target_layer, fc_layer=fc_layer)
         self.label_col = label_col
         self.meta = self.load_meta(label_path)
         self.mapper = self.load_mapper(mapper_path)
@@ -197,8 +208,8 @@ class LogoImageCallback(WandbImageCallback):
             pl_module.model,
             val_imgs,
             val_labels,
-            target_layer="_blocks",
-            fc_layer="_fc",
+            target_layer=self.target_layer,
+            fc_layer=self.fc_layer,
             size=416,
         )
 
@@ -233,8 +244,8 @@ class LogoImageCallback(WandbImageCallback):
             pl_module.model,
             test_imgs,
             test_labels,
-            target_layer="_blocks",
-            fc_layer="_fc",
+            target_layer=self.target_layer,
+            fc_layer=self.fc_layer,
             size=416,
         )
 
