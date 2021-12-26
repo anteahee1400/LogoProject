@@ -3,6 +3,7 @@ import yaml
 import inspect
 import pandas as pd
 import tqdm
+import random
 
 def read_yaml(path):
     """ """
@@ -100,3 +101,22 @@ def set_split_by_index(train_df, idx):
     for s in ["train", "val"]:
         dfs.append(train_df[train_df.split == s].reset_index(drop=True))
     return pd.concat(dfs).reset_index(drop=True)
+
+
+def stratified_sampling(df):
+    df_unique = df.groupby("path").first().reset_index()
+    split_mapper = {}
+    for l in tqdm(df_unique.label.unique()):
+        sub = df[df.label==l].sort_values(by="path").reset_index(drop=True)
+        for p in sub.path.unique():
+            prob = random.random()
+            if prob > 0.3:
+                split = 'train'
+            elif prob < 0.1:
+                split = 'test'
+            else:
+                split = 'val'
+            split_mapper[p] = split
+            
+    df['split'] = df['path'].apply(lambda x: split_mapper[x])
+    return df
