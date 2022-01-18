@@ -1,5 +1,11 @@
 from pytorch_pretrained_vit import ViT
 
+
+def init_model_from_config(config):
+    model_name = config.pop('model_name')
+    model = Vit(model_name, pretrained=True, **config)
+    return model
+
 def vit_b16(**kwargs):
     model = ViT('B_16', pretrained=True, **kwargs)
     return model
