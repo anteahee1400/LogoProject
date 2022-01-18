@@ -1,8 +1,11 @@
-from autotrainer.model.utils.common import view_x
+import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-import pytorch_lightning as pl
 import torchmetrics
+from autotrainer.model.utils.common import view_x
+
+# import * is actually not a good idea.
+# Old template engine use this just for convenience :(
 from logo_clf.model.efficientnet_pretrained import *
 from logo_clf.metric import *
 
@@ -11,7 +14,7 @@ class LogoLightningModule(pl.LightningModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self._setup_configure()
+        self._setup_config()
 
     def load_from_checkpoint(self, checkpoint_path):
         loaded = torch.load(checkpoint_path, map_location="cpu")
@@ -85,7 +88,7 @@ class LogoLightningModule(pl.LightningModule):
         avg_loss = torch.stack([out["test_loss"] for out in outputs]).mean()
         self.log("avg_test_loss", avg_loss)
 
-    def _setup_configure(self):
+    def _setup_config(self):
         self.model = self.configure_model()
         self.loss_func = self.configure_loss()
         self.test_loss_func = torch.nn.BCEWithLogitsLoss()
@@ -95,6 +98,12 @@ class LogoLightningModule(pl.LightningModule):
         model_name = self.config["model"]["name"]
         model_kwargs = self.config["model"]["kwargs"]
         model_ckpt = self.config["model"]["ckpt"]
+        # Find class by name like this is bad too. Check link below. All configure series have same issues.
+        # https://github.com/wandb/client/blob/849b2a9279dc2fa8e814fa83f999c0e5650ee06c/wandb/sdk/interface/artifacts.py#L737
+        # this line should be changed like ...
+        # model = BaseModel.lookup_by_name(model_name)(**model_kwargs)
+        # or model = BaseModel.init_by_name(model_name, model_kwargs)
+        # or model = ModelFactory.create(model_name, model_kwargs)
         model = eval(model_name)(**model_kwargs)
         if model_ckpt is not None:
             loaded = torch.load(model_ckpt, map_location="cpu")
@@ -145,5 +154,6 @@ class LogoLightningModule(pl.LightningModule):
             key = metric.__class__.__name__.lower() + str(idx)
             pred = predicted.view(-1, predicted.shape[-1])
             prob = F.softmax(pred, dim=1)
+            # need to move device?
             evaluations[key] = metric.to(device)(prob, answer.long())
         return evaluations
