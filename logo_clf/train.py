@@ -15,6 +15,7 @@ from utils import read_yaml, update_config
 def train(config, use_wandb=False):
     callbacks = []
     logger = None
+    logger_setting = trainer_params.pop("wandb_logger")
     trainer_params = config['trainer']
     
     # load datamodule & lightning module
@@ -34,8 +35,6 @@ def train(config, use_wandb=False):
             data_path=config['datamodule']['dataset']['data_path']
         )
         callbacks.append(wandb_callback)
-        
-        logger_setting = trainer_params.pop("wandb_logger")
         logger = WandbLogger(**logger_setting)
     
     trainer = pl.Trainer(callbacks=callbacks, logger=logger, **trainer_params)
