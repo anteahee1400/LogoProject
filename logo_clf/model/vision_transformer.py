@@ -1,7 +1,7 @@
 from pytorch_pretrained_vit import ViT
 
 
-def init_model_from_config(config):
+def init_vit_from_config(config):
     model_name = config.pop('model_name')
     model = Vit(model_name, pretrained=True, **config)
     return model
