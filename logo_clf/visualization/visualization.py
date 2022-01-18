@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import tqdm
-
 from PIL import Image
 
 
@@ -13,12 +12,10 @@ def code_to_str(df):
     Returns:
         df with transformated vienna code
     """
-    if df["code_s"].dtype.name != "object":
-        df["code_s"] = df["code_s"].apply(lambda x: str(x).zfill(6))
-    if df["code_m"].dtype.name != "object":
-        df["code_m"] = df["code_m"].apply(lambda x: str(x).zfill(4))
-    if df["code_l"].dtype.name != "object":
-        df["code_l"] = df["code_l"].apply(lambda x: str(x).zfill(2))
+    # These are not heavy operations, just do it
+    df["code_s"] = df["code_s"].apply(lambda x: str(x).zfill(6))
+    df["code_m"] = df["code_m"].apply(lambda x: str(x).zfill(4))
+    df["code_l"] = df["code_l"].apply(lambda x: str(x).zfill(2))
     return df
 
 
@@ -36,6 +33,7 @@ def mapper(df, key="code_s", value="desc_s"):
     return {row[key]: row[value] for i, row in df.iterrows()}
 
 
+# need more detailed function name, draw_bar_plot
 def bar(df, title, xlabel="index", ylabel="count"):
     """
     Args:
@@ -54,7 +52,7 @@ def bar(df, title, xlabel="index", ylabel="count"):
     plt.ylabel(ylabel)
     plt.show()
 
-
+# function name to, draw_class_distribution
 def class_balance(df, class_name="code_s", visual=False, **kwargs):
     """
     check the class distribution
@@ -80,7 +78,7 @@ def class_balance(df, class_name="code_s", visual=False, **kwargs):
         bar(df, "Class Distribution", **kwargs)
     return df
 
-
+# function name to, count_classes_by_image
 def number_of_classes_by_image(df, visual=False):
     """
     check the distribution of the number of classes by image
@@ -112,6 +110,10 @@ def number_of_classes_by_image(df, visual=False):
         bar(df.head(10), "Number of Classes by Image", xlabel="num_classes")
     return df
 
+'''
+function name should start with verb.
+consider change functions names below
+'''
 
 def average_width_and_height(df):
     """

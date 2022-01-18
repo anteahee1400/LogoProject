@@ -1,34 +1,38 @@
 import argparse
-import pandas as pd
-from utils import read_yaml, update_config
 
+import pandas as pd
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 
 from callback import *
 from datamodule import LogoDataModule
 from lightning_module import LogoLightningModule
+from utils import read_yaml, update_config
 
 
-def test(config, wandb=False, ckpt=None):
+def test(config, use_wandb=False, ckpt=None):
+    callbacks = []
+    logger = None
+    trainer_params = config["trainer"]
+    logger_settings = trainer_params.pop("wandb_logger")
+    
+    # load model with lighitning Model
     lightning_module = LogoLightningModule(config["lightning_module"])
     if ckpt is not None:
         lightning_module.load_from_checkpoint(checkpoint_path=ckpt)
+        
+    # load datamodule
     datamodule = LogoDataModule(config["datamodule"])
-    trainer_params = config["trainer"]
-    wandb_logger_setting = trainer_params.pop("wandb_logger")
-    callbacks = []
-    if wandb:
+    
+    if use_wandb:
         wandb_callback = LogoImageCallback(
             datamodule,
             **config['callback']
         )
         callbacks.append(wandb_callback)
+        logger = WandbLogger(**logger_settings)
 
-        wandb_logger = WandbLogger(**wandb_logger_setting)
-        trainer_params.update({"logger": wandb_logger})
-
-    trainer = pl.Trainer(callbacks=callbacks, **trainer_params)
+    trainer = pl.Trainer(callbacks=callbacks, logger=logger, **trainer_params)
     result = trainer.test(lightning_module, datamodule)
     return result
 

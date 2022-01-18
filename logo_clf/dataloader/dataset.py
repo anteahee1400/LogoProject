@@ -1,15 +1,16 @@
-import numpy as np
-import pandas as pd
+
 from pathlib import Path
 from typing import Callable, List, Optional, Union
 
+import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data import Dataset
 from torchvision import transforms
 
 from logo_clf.dataloader.utils import *
 
-
+# Tools -> Mixin
 class LogoDataset(Dataset, TensorTools, ImageTools):
     def __init__(
         self,
@@ -49,6 +50,7 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
             else None
         )
         if self.label_df is not None:
+            # function names -> split_dataset, sort_dataset
             self.do_split()
             self.do_sort()
             self.label_df["label"] = self.label_df[label_col]
