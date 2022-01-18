@@ -5,6 +5,7 @@ import pandas as pd
 import tqdm
 import random
 
+
 def read_yaml(path):
     """ """
     result = {}
@@ -71,10 +72,10 @@ def update_config(default, path):
     if trainer is not None:
         for k in trainer.keys():
             default["trainer"][k] = trainer[k]
-    
+
     if callback is not None:
         for k in callback.keys():
-            default['callback'][k] = callback[k]
+            default["callback"][k] = callback[k]
 
     return default
 
@@ -106,17 +107,17 @@ def set_split_by_index(train_df, idx):
 def stratified_sampling(df):
     df_unique = df.groupby("path").first().reset_index()
     split_mapper = {}
-    for l in tqdm(df_unique.label.unique()):
-        sub = df[df.label==l].sort_values(by="path").reset_index(drop=True)
+    for l in tqdm.tqdm(df_unique.label.unique()):
+        sub = df[df.label == l].sort_values(by="path").reset_index(drop=True)
         for p in sub.path.unique():
             prob = random.random()
             if prob > 0.3:
-                split = 'train'
+                split = "train"
             elif prob < 0.1:
-                split = 'test'
+                split = "test"
             else:
-                split = 'val'
+                split = "val"
             split_mapper[p] = split
-            
-    df['split'] = df['path'].apply(lambda x: split_mapper[x])
+
+    df["split"] = df["path"].apply(lambda x: split_mapper[x])
     return df

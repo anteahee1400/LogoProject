@@ -54,7 +54,7 @@ if __name__ == "__main__":
     elif args.device == "cpu":
         config["trainer"].pop("gpus")
     else:
-        config["trainer"]["gpus"] = int(args.device)
+        config["trainer"]["gpus"] = [int(args.device)]
 
     result = test(config, args.wandb, args.ckpt)
     result_file = args.config.split('/')[-1].replace('.yaml', "")

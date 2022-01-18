@@ -19,21 +19,21 @@ lightning_module:
     ckpt: /home/ubuntu/yha/AutoTrainer/autotrainer/working/logo_project/logo_clf/0/results/train/ckpt/epoch=004-avg_val_loss=0.9735.ckpt
   evaluation:
     items:
-      - {name: AccS, kwargs: {k: 9}}
-      - {name: AccG, kwargs: {k: 9}}
-      - {name: PrecK, kwargs: {k: 9}}
-      - {name: RecK, kwargs: {k: 9}}
-      - {name: F1K, kwargs: {k: 9}}
+      - {name: AccS, kwargs: {k: 5}}
+      - {name: AccG, kwargs: {k: 5}}
+      - {name: PrecK, kwargs: {k: 5}}
+      - {name: RecK, kwargs: {k: 5}}
+      - {name: F1K, kwargs: {k: 5}}
 
 trainer:
   gpus: [1]
   wandb_logger:
     project: Logo_vienna_code_classification
-    name: test_eb5_cv0_epoch4_k9
+    name: test_eb5_cv0_epoch4_k5
 
 callback:
   num_samples: 100
   data_path: /home/ubuntu/datasets/LOGO/Logo_clf
   label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
   label_col: label
-  k: 9
+  k: 5

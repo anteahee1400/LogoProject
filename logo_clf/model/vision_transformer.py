@@ -1,0 +1,33 @@
+from pytorch_pretrained_vit import ViT
+
+def vit_b16(**kwargs):
+    model = ViT('B_16', pretrained=True, **kwargs)
+    return model
+
+def vit_b32(**kwargs):
+    model = ViT('B_32', pretrained=True, **kwargs)
+    return model
+
+def vit_l16(**kwargs):
+    model = ViT('L_16', pretrained=True, **kwargs)
+    return model
+
+def vit_l32(**kwargs):
+    model = ViT('L_32', pretrained=True, **kwargs)
+    return model
+
+def vit_b16_imagenet1k(**kwargs):
+    model = ViT('B_16_imagenet1k', pretrained=True, **kwargs)
+    return model
+
+def vit_b32_imagenet1k(**kwargs):
+    model = ViT('B_32_imagenet1k', pretrained=True, **kwargs)
+    return model
+
+def vit_l16_imagenet1k(**kwargs):
+    model = ViT('L_16_imagenet1k', pretrained=True, **kwargs)
+    return model
+
+def vit_l32_imagenet1k(**kwargs):
+    model = ViT('L_32_imagenet1k', pretrained=True, **kwargs)
+    return model

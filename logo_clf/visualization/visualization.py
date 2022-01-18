@@ -55,7 +55,7 @@ def bar(df, title, xlabel="index", ylabel="count"):
     plt.show()
 
 
-def class_balance(df, class_name="code_s", visual=False):
+def class_balance(df, class_name="code_s", visual=False, **kwargs):
     """
     check the class distribution
     Args:
@@ -77,7 +77,7 @@ def class_balance(df, class_name="code_s", visual=False):
     df = df[[class_name, "path"]].rename(columns={"path": "count"})
     df["desc"] = df[class_name].apply(lambda x: mapping_dict[x])
     if visual:
-        bar(df, "Class Distribution")
+        bar(df, "Class Distribution", **kwargs)
     return df
 
 
