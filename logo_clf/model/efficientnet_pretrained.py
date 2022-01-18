@@ -1,6 +1,9 @@
 from typing import Any
 from efficientnet_pytorch import EfficientNet
 
+def init_efficientnet_from_config(config):
+    # check vit.py
+    pass
 
 def efficientnet_b0_pretrained(**kwargs: Any) -> EfficientNet:
     model = EfficientNet.from_pretrained("efficientnet-b0", **kwargs)
