@@ -12,19 +12,22 @@ from utils import read_yaml, update_config
 # if you import wandb, then it will cause some confusions later. 
 # dont use keyword or lib name like this
 # def train(config, use_wandb=False):
-def train(config, wandb=False):
+def train(config, use_wandb=False):
+    callbacks = []
+    logger = None
     trainer_params = config['trainer']
     
+    # load datamodule & lightning module
     datamodule = LogoDataModule(config['datamodule'])
     lightning_module = LogoLightningModule(config['lightning_module'])
     
-    callbacks = []
+    # set callbacks
     ckpt_callback = checkpoint_callback(
         dir_path="ckpt", monitor="avg_val_loss", save_top_k=-1
     )
     callbacks.append(ckpt_callback)
     
-    if wandb:
+    if use_wandb:
         wandb_callback = LogoImageCallback(
             datamodule, 
             label_path=config['datamodule']['dataset']['label_path'], 
@@ -32,10 +35,10 @@ def train(config, wandb=False):
         )
         callbacks.append(wandb_callback)
         
-        wandb_logger_setting = trainer_params.pop("wandb_logger")
-        wandb_logger = WandbLogger(**wandb_logger_setting)
+        logger_setting = trainer_params.pop("wandb_logger")
+        logger = WandbLogger(**logger_setting)
     
-    trainer = pl.Trainer(callbacks=callbacks, logger=wandb_logger, **trainer_params)
+    trainer = pl.Trainer(callbacks=callbacks, logger=logger, **trainer_params)
     trainer.fit(lightning_module, datamodule)
 
 
