@@ -2,7 +2,9 @@ import pytorch_lightning as pl
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from dataloader import load_dataset, LogoDataset
+# it will be better to change dir name to data or something else
+# dataloader is too common keyword 
+from dataloader import load_dataset, LogoDataset 
 from utils import get_kwargs_keys_from_method
 
 
@@ -10,9 +12,9 @@ class LogoDataModule(pl.LightningDataModule):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self._setup_configure()
+        self._setup_config()
 
-    def _setup_configure(self):
+    def _setup_config(self):
         dataset_keys = get_kwargs_keys_from_method(LogoDataset.__init__)
         self.dataset_kwargs = {
             k: v for k, v in self.config['dataset'].items() if k in dataset_keys
