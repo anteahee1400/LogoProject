@@ -8,18 +8,8 @@ import torch
 from torchvision import transforms
 import wandb
 
-from logo_clf.utils import read_json
+from logo_clf.utils import read_json, split_multi_hot
 from logo_clf.visualization.gradcam import *
-
-
-def split_multi_hot(label):
-    batch_ids, batch_labels = torch.where(label == 1)
-    labels = [[] for _ in range(label.shape[0])]
-    for i, idx in enumerate(batch_ids):
-        labels[idx].append(batch_labels[i])
-    labels = [torch.stack(l) for l in labels]
-    max_len = max([len(l) for l in labels])
-    return labels, max_len
 
 
 class WandbCallback(pl.Callback):
@@ -27,63 +17,34 @@ class WandbCallback(pl.Callback):
         super().__init__()
         datamodule.setup()
         val_samples = next(iter(datamodule.val_dataloader(shuffle=True)))
-        test_samples = next(iter(datamodule.test_dataloader(shuffle=True)))
+        try:
+            test_samples = next(iter(datamodule.test_dataloader(shuffle=True)))
+        except:
+            test_samples = None
         self.val_imgs, self.val_labels = val_samples
-        self.test_imgs, self.test_labels = test_samples
-
-    def on_keyboard_interrupt(self, trainer, pl_module):
-        self.trained_model_artifact(pl_module.model)
-        return super().on_keyboard_interrupt(trainer, pl_module)
-
-    def on_train_epoch_start(self, trainer, pl_module):
-        if trainer.current_epoch == 0:
-            self.init_model_artifact(pl_module.model)
-
-    def init_model_artifact(self, model):
-        model_artifact = wandb.Artifact(
-            f"{model.__class__.__name__}_init",
-            type="model",
-            description=f"{model.__class__.__name__} style CNN",
-            metadata=dict(wandb.config),
-        )
-        torch.save(model.state_dict(), "initialized_model.pt")
-        model_artifact.add_file("initialized_model.pt")
-        wandb.save("initialized_model.pt")
-        wandb.log_artifact(model_artifact)
-
-    def trained_model_artifact(self, model):
-        model_artifact = wandb.Artifact(
-            f"{model.__class__.__name__}_trained",
-            type="model",
-            description=f"trained {model.__class__.__name__}",
-            metadata=dict(wandb.config),
-        )
-        torch.save(model.state_dict(), "trained_model.pt")
-        model_artifact.add_file("trained_model.pt")
-        wandb.save("trained_model.pt")
-        wandb.log_artifact(model_artifact)
+        if test_samples is not None:
+            self.test_imgs, self.test_labels = test_samples
 
 
 class WandbImageCallback(WandbCallback):
     def __init__(
         self,
         datamodule,
+        gradcam=False,
         target_layer="_blocks",
         fc_layer="_fc",
         **kwargs,
     ):
         super().__init__(datamodule)
+        self.gradcam = gradcam
         self.target_layer = target_layer
         self.fc_layer = fc_layer
-        
+
     def on_validation_epoch_end(self, trainer, pl_module):
         val_imgs = self.val_imgs.to(device=pl_module.device)
         val_labels = self.val_labels.to(device=pl_module.device)
         logits = pl_module.model.forward(val_imgs)
         preds = torch.argmax(logits, -1)
-
-        if trainer.current_epoch % 5 == 4:
-            self.trained_model_artifact(pl_module.model)
 
         ## gradcam
         model = pl_module.model
@@ -101,7 +62,9 @@ class WandbImageCallback(WandbCallback):
                 "originals": originals,
                 "gradcams": gradcams,
                 "examples": self.predimgs(val_imgs, val_labels, preds),
-            },
+            }
+            if self.gradcam
+            else {"examples": self.predimgs(val_imgs, val_labels, preds)},
             commit=False,
         )
 
@@ -143,6 +106,7 @@ class LogoImageCallback(WandbImageCallback):
     def __init__(
         self,
         datamodule,
+        gradcam=False,
         target_layer="_blocks",
         fc_layer="_fc",
         data_path=None,
@@ -152,7 +116,9 @@ class LogoImageCallback(WandbImageCallback):
         k=5,
         **kwargs,
     ):
-        super().__init__(datamodule, target_layer=target_layer, fc_layer=fc_layer)
+        super().__init__(
+            datamodule, gradcam=gradcam, target_layer=target_layer, fc_layer=fc_layer
+        )
         self.label_col = label_col
         self.meta = self.load_meta(label_path)
         self.mapper = self.load_mapper(mapper_path)
@@ -199,31 +165,35 @@ class LogoImageCallback(WandbImageCallback):
         val_labels = self.val_labels.to(device=pl_module.device)
 
         logits = pl_module.model.forward(val_imgs)
-
-        if trainer.current_epoch % 5 == 4:
-            self.trained_model_artifact(pl_module.model)
-
+        scores = torch.nn.functional.softmax(logits, dim=-1)
+        batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
+        batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
+        
         ## gradcam
-        gradcams, originals = self.gradcams(
-            pl_module.model,
-            val_imgs,
-            val_labels,
-            target_layer=self.target_layer,
-            fc_layer=self.fc_layer,
-            size=416,
-        )
+        model = pl_module.model
+        if self.gradcam:
+            gradcams, originals = self.gradcams(
+                model,
+                val_imgs,
+                val_labels,
+                target_layer=self.target_layer,
+                fc_layer=self.fc_layer,
+                size=416,
+            )
 
         # table
-        test_table = self.log_table(
-            val_imgs, val_labels, logits, columns=["image", "label"], k=self.k
+        val_table = self.log_table(
+            val_imgs, val_labels, batch_k_probs, batch_k_preds, columns=["image", "label"]
         )
 
         trainer.logger.experiment.log(
             {
-                "test_predictions": test_table,
+                "val_predictions": val_table,
                 "originals": originals,
                 "gradcams": gradcams,
-            },
+            }
+            if self.gradcam
+            else {"val_predictions": val_table},
             commit=False,
         )
 
@@ -235,26 +205,28 @@ class LogoImageCallback(WandbImageCallback):
             test_labels, max_len = split_multi_hot(test_labels)
 
         logits = pl_module.model.forward(test_imgs)
-
-        if trainer.current_epoch % 5 == 4:
-            self.trained_model_artifact(pl_module.model)
-
+        scores = torch.nn.functional.softmax(logits, dim=-1)
+        batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
+        batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
+        
         ## gradcam
-        gradcams, originals = self.gradcams(
-            pl_module.model,
-            test_imgs,
-            test_labels,
-            target_layer=self.target_layer,
-            fc_layer=self.fc_layer,
-            size=416,
-        )
+        model = pl_module.model
+        if self.gradcam:
+            gradcams, originals = self.gradcams(
+                model,
+                test_imgs,
+                test_labels,
+                target_layer=self.target_layer,
+                fc_layer=self.fc_layer,
+                size=416,
+            )
 
         # table
         columns = ["image"]
         for i in range(max_len):
             columns.append(f"label{i}")
         test_table = self.log_table(
-            test_imgs, test_labels, logits, columns=columns, k=self.k
+            test_imgs, test_labels, batch_k_probs, batch_k_preds, columns=columns
         )
 
         trainer.logger.experiment.log(
@@ -262,11 +234,13 @@ class LogoImageCallback(WandbImageCallback):
                 "test_predictions": test_table,
                 "originals": originals,
                 "gradcams": gradcams,
-            },
+            }
+            if self.gradcam
+            else {"test_predictions": test_table},
             commit=False,
         )
 
-    def log_table(self, real_imgs, labels, outputs, columns=["image", "label"], k=5):
+    def log_table(self, real_imgs, labels, probabilities, predictions, columns=["image", "label"]):
         if isinstance(labels, list):
             labels = [
                 [self.mapper.get(str(l), "none") for l in label.cpu().numpy()]
@@ -274,16 +248,14 @@ class LogoImageCallback(WandbImageCallback):
             ]
         else:
             labels = [self.mapper.get(str(l), "none") for l in labels.cpu().numpy()]
-        scores = torch.nn.functional.softmax(outputs, dim=-1)
-        batch_k_probs = scores.sort(dim=1, descending=True).values[:, :k].cpu().numpy()
-        batch_k_preds = scores.argsort(dim=1, descending=True)[:, :k].cpu().numpy()
-        batch_k_predimgs = [self.get_imgs_from_mapper(preds) for preds in batch_k_preds]
+        
+        predimgs = [self.get_imgs_from_mapper(preds) for preds in predictions]
 
-        batch_k_wandbimgs = []
+        wandbimgs = []
         for preds, probs, lists_of_imgs in zip(
-            batch_k_preds, batch_k_probs, batch_k_predimgs
+            predictions, probabilities, predimgs
         ):
-            batch_k_wandbimgs.append(
+            wandbimgs.append(
                 [
                     (
                         self.mapper.get(str(l), str(l)),
@@ -295,13 +267,13 @@ class LogoImageCallback(WandbImageCallback):
             )
 
         col_len = len(columns)
-        for i in range(k):
+        for i in range(len(predictions[0])):
             columns.append(f"pred_{i}_label")
             columns.append(f"pred_{i}_prob")
             columns.append(f"pred_{i}_image")
 
         all_data = []
-        for img, label, limlist in zip(real_imgs, labels, batch_k_wandbimgs):
+        for img, label, limlist in zip(real_imgs, labels, wandbimgs):
             if isinstance(label, list):
                 data = [wandb.Image(img), *label]
                 data.extend(["x"] * (col_len - len(data)))
@@ -320,6 +292,188 @@ class LogoImageCallback(WandbImageCallback):
         return test_table
 
 
+class LogoMultilabelCallback(LogoImageCallback):
+    def __init__(
+        self,
+        datamodule,
+        gradcam=False,
+        target_layer="_blocks",
+        fc_layer="_fc",
+        data_path=None,
+        label_col="label",
+        label_path=None,
+        mapper_path=None,
+        k=5,
+        threshold=0.5,
+        **kwargs,
+    ):
+        super().__init__(
+            datamodule,
+            gradcam=gradcam,
+            target_layer=target_layer,
+            fc_layer=fc_layer,
+            data_path=data_path,
+            label_col=label_col,
+            label_path=label_path,
+            mapper_path=mapper_path,
+            k=k,
+        )
+        self.threshold = threshold
+
+    def log_table(self, real_imgs, labels, probabilities, predictions, columns=["image", "label"], max_len=5):
+        if isinstance(labels, list):
+            labels = [
+                [self.mapper.get(str(l), "none") for l in label.cpu().numpy()]
+                for label in labels
+            ]
+        else:
+            labels = [self.mapper.get(str(l), "none") for l in labels.cpu().numpy()]
+        
+        predimgs = [self.get_imgs_from_mapper(preds.cpu().numpy()) for preds in predictions]
+
+        wandbimgs = []
+        for preds, probs, lists_of_imgs in zip(
+            predictions, probabilities, predimgs
+        ):
+            wandbimgs.append(
+                [
+                    (
+                        self.mapper.get(str(l), str(l)),
+                        f"{round(p*100, 3)}%",
+                        wandb.Image(im[0]),
+                    )
+                    for l, p, im in zip(preds.cpu().numpy(), probs.cpu().numpy(), lists_of_imgs)
+                ]
+            )
+
+        col_len = len(columns)
+        for i in range(max_len):
+            columns.append(f"pred_{i}_label")
+            columns.append(f"pred_{i}_prob")
+            columns.append(f"pred_{i}_image")
+
+        all_data = []
+        for img, label, limlist in zip(real_imgs, labels, wandbimgs):
+            if isinstance(label, list):
+                data = [wandb.Image(img), *label]
+                extend_len = max(col_len - len(data), 0)
+                data.extend(["x"] * extend_len)
+            else:
+                data = [wandb.Image(img), label]
+            for k, p, w in limlist:
+                data.append(k)
+                data.append(p)
+                data.append(w)          
+            data.extend([None] * (len(columns)-len(data)))
+            all_data.append(data[:len(columns)])
+        
+        test_table = wandb.Table(
+            columns=columns,
+            data=all_data,
+        )
+        return test_table
+    
+
+    def on_validation_epoch_end(self, trainer, pl_module):
+        val_imgs = self.val_imgs.to(device=pl_module.device)
+        val_labels = self.val_labels.to(device=pl_module.device)
+
+        logits = pl_module.model.forward(val_imgs)
+        probs = torch.sigmoid(logits)
+        preds = torch.where(
+            probs > self.threshold,
+            torch.ones_like(val_labels),
+            torch.zeros_like(val_labels),
+        )
+
+        max_len = 1
+        max_pred_len = 1
+        if len(val_labels.shape) == 2:
+            val_labels, max_len = split_multi_hot(val_labels)
+            preds, max_pred_len = split_multi_hot(preds)
+            probs = [p[pr] for p, pr in zip(probs, preds)]
+            
+        ## gradcam
+        model = pl_module.model
+        if self.gradcam:
+            gradcams, originals = self.gradcams(
+                model,
+                val_imgs,
+                val_labels,
+                target_layer=self.target_layer,
+                fc_layer=self.fc_layer,
+                size=416,
+            )
+            
+        # table
+        columns = ["image"]
+        for i in range(max_len):
+            columns.append(f"label{i}")
+        val_table = self.log_table(
+            val_imgs, val_labels, probs, preds, columns=columns, max_len=max_pred_len
+        )
+
+        trainer.logger.experiment.log(
+            {
+                "val_predictions": val_table,
+                "originals": originals,
+                "gradcams": gradcams,
+            }
+            if self.gradcam
+            else {"val_predictions": val_table},
+            commit=False,
+        )
+
+    def on_test_epoch_end(self, trainer, pl_module):
+        test_imgs = self.test_imgs.to(device=pl_module.device)
+        test_labels = self.test_labels.to(device=pl_module.device)
+        logits = pl_module.model.forward(test_imgs)
+        probs = torch.sigmoid(logits)
+        preds = torch.where(
+            probs > self.threshold,
+            torch.ones_like(test_labels),
+            torch.zeros_like(test_labels),
+        )
+
+        max_len = 1
+        max_pred_len = 1
+        if len(test_labels.shape) == 2:
+            test_labels, max_len = split_multi_hot(test_labels)
+            preds, max_pred_len = split_multi_hot(preds)
+            probs = [p[pr] for p, pr in zip(probs, preds)]
+            
+        ## gradcam
+        model = pl_module.model
+        if self.gradcam:
+            gradcams, originals = self.gradcams(
+                model,
+                test_imgs,
+                test_labels,
+                target_layer=self.target_layer,
+                fc_layer=self.fc_layer,
+                size=416,
+            )
+
+        # table
+        columns = ["image"]
+        for i in range(max_len):
+            columns.append(f"label{i}")
+        test_table = self.log_table(
+            test_imgs, test_labels, probs, preds, columns=columns, max_len=5
+        )
+
+        trainer.logger.experiment.log(
+            {
+                "test_predictions": test_table,
+                "originals": originals,
+                "gradcams": gradcams,
+            }
+            if self.gradcam
+            else {"test_predictions": test_table},
+            commit=False,
+        )
+
+
 class LogoObjCallback(LogoImageCallback):
     def on_validation_epoch_end(self, trainer, pl_module):
         val_imgs = self.val_imgs.to(device=pl_module.device)
@@ -331,9 +485,6 @@ class LogoObjCallback(LogoImageCallback):
         logits = pl_module.model.forward(
             val_imgs
         )  # {"pred_logits":torch.Size([32, 100, 84]), "pred_boxes":torch.Size([32, 100, 4])}
-
-        if trainer.current_epoch % 5 == 4:
-            self.trained_model_artifact(pl_module.model)
 
         # bboxes
         test_table = self.log_table(

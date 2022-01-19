@@ -4,6 +4,9 @@ import inspect
 import pandas as pd
 import tqdm
 import random
+import torch
+import torch.nn.functional as F
+
 
 
 def read_yaml(path):
@@ -41,7 +44,6 @@ def to_json(path, info):
     with open(path, "w") as f:
         json.dump(info, f, sort_keys=False, indent="\t", separators=(",", ": "))
 
-
 def get_kwargs_keys_from_method(method):
     keys = []
     for k in inspect.signature(method).parameters.values():
@@ -66,6 +68,9 @@ def update_config(default, path):
 
     if lightning_module is not None:
         for k1 in lightning_module.keys():
+            if not isinstance(lightning_module[k1], dict):
+                default['lightning_module'][k1] = lightning_module[k1]
+                continue
             for k2 in lightning_module[k1].keys():
                 default["lightning_module"][k1][k2] = lightning_module[k1][k2]
 
@@ -121,3 +126,21 @@ def stratified_sampling(df):
 
     df["split"] = df["path"].apply(lambda x: split_mapper[x])
     return df
+
+
+def split_multi_hot(label):
+    try:
+        batch_ids, batch_labels = torch.where(label == 1)
+        labels = [[] for _ in range(label.shape[0])]
+        for i, idx in enumerate(batch_ids):
+            labels[idx].append(batch_labels[i])
+        labels = [torch.stack(l) for l in labels]
+        max_len = max([len(l) for l in labels])
+        return labels, max_len
+    except:
+        return [torch.tensor([0])]*len(label), 1
+
+def concat_multi_hot(label_unstack, num_classes):
+    device = label_unstack[0].device
+    unstack = [F.one_hot(label, num_classes).sum(dim=0) > 0 for label in label_unstack]
+    return torch.stack(unstack).to(device)

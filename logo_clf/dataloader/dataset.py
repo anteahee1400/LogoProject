@@ -1,7 +1,8 @@
-import numpy as np
+import sys
+import inspect
 import pandas as pd
 from pathlib import Path
-from typing import Callable, List, Optional, Union
+from typing import Callable, List, Optional
 
 import torch
 from torch.utils.data import Dataset
@@ -11,6 +12,7 @@ from logo_clf.dataloader.utils import *
 
 
 class LogoDataset(Dataset, TensorTools, ImageTools):
+    
     def __init__(
         self,
         data_path: str,
@@ -28,14 +30,15 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
         self.data_path = data_path
         if data_path.name in ["train_folder", "test_folder"]:
             self.data_path = data_path.parent
-        self.train_path = self.data_path / "train_folder"
-        self.test_path = self.data_path / "test_folder"
-        self.train_data = get_files_from_paths(self.train_path, "jpg")
-        self.test_data = get_files_from_paths(self.test_path, "jpg")
-        if split == "test":
-            self.data_files = self.test_data
-        else:
-            self.data_files = self.train_data
+        # self.train_path = self.data_path / "train_folder"
+        # self.test_path = self.data_path / "test_folder"
+        # self.train_data = get_files_from_paths(self.train_path, "jpg")
+        # self.test_data = get_files_from_paths(self.test_path, "jpg")
+        # if split == "test":
+        #     self.data_files = self.test_data
+        # else:
+        #     self.data_files = self.train_data
+        self.data_files = get_files_from_paths(self.data_path, "jpg")
         self.label_path = label_path
         self.augmentations = parse_augmentation_texts(augmentations)
         self.transforms = parse_transform_texts(transforms)
@@ -72,6 +75,7 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
     def __len__(self):
         # return len(self.data_files)  # label_df
         return self.len_grouped_label_df * (self.len_augmentations + 1)
+        # return 128
 
     def __getitem__(self, idx):
 
@@ -107,7 +111,7 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
 
     def do_sort(self):
         self.label_df = sort_df(self.label_df)
-        self.data_files = sorted(self.data_files)
+        self.data_files = sorted(self.data_files, key=lambda x: x.name)
 
     def filter_out_by_split(self, data_files):
         data_df = pd.DataFrame({"abspath": data_files})
@@ -153,9 +157,47 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
         return self.to_tensor(label_tensor, dtype=torch.float32)
 
 
-def load_dataset(kwargs, split):
-    kwargs.update({"split": split})
-    return LogoDataset(**kwargs)
+class LogoMultilabelDataset(LogoDataset):
+    
+    def __getitem__(self, idx):
+    
+        augment_idx, idx = self.get_augmentation_idx(idx)
+        image = self.load_image(self.data_files[idx])
+
+        if augment_idx >= 0:
+            image = self.augmentations[augment_idx](image)
+
+        if self.transforms is not None:
+            image = self.transforms(image)
+
+        if self.return_label:
+            labels = self.get_labels(idx)
+            label = self.to_multilabel(labels)
+        else:
+            label = self.to_tensor(-1)
+
+        return (image, label)
+    
+
+def load_dataset_cls(cls_name):
+    dataset_cls = None
+    try:
+        AVAILABLE_DATASETS = dict(
+            inspect.getmembers(sys.modules[__name__], inspect.isclass)
+        )
+        dataset_cls = AVAILABLE_DATASETS[cls_name]
+    except:
+        print("Wrong dataset style")
+    return dataset_cls
+
+
+def load_dataset(dataset_dict, split):
+    cls_name = dataset_dict.pop("dataset_cls")
+    dataset_dict.update({"split": split})
+
+    dataset_cls = load_dataset_cls(cls_name)
+
+    return dataset_cls(**dataset_dict)
 
 
 if __name__ == "__main__":

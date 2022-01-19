@@ -1,9 +1,8 @@
 import pytorch_lightning as pl
 from torch.utils.data import DataLoader
-from torchvision import transforms
 
-from dataloader import load_dataset, LogoDataset
-from utils import get_kwargs_keys_from_method
+from logo_clf.dataloader import load_dataset, LogoDataset
+from logo_clf.utils import get_kwargs_keys_from_method
 
 
 class LogoDataModule(pl.LightningDataModule):
@@ -15,14 +14,15 @@ class LogoDataModule(pl.LightningDataModule):
     def _setup_configure(self):
         dataset_keys = get_kwargs_keys_from_method(LogoDataset.__init__)
         self.dataset_kwargs = {
-            k: v for k, v in self.config['dataset'].items() if k in dataset_keys
+            k: v for k, v in self.config["dataset"].items() if k in dataset_keys
         }
+        self.dataset_kwargs['dataset_cls'] = self.config['dataset']['dataset_cls']
 
         dataloader_keys = get_kwargs_keys_from_method(DataLoader.__init__)
         self.dataloader_kwargs = {
-            k: v for k, v in self.config['dataloader'].items() if k in dataloader_keys
+            k: v for k, v in self.config["dataloader"].items() if k in dataloader_keys
         }
-    
+
     def setup(self, stage=None):
         if stage == "fit" or stage is None:
             self.dataset_train = self._dataset(split="train")

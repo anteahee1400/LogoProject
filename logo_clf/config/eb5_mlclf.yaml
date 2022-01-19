@@ -1,14 +1,9 @@
 datamodule:
   dataset:
-    dataset_cls: LogoDataset
+    dataset_cls: LogoMultilabelDataset
     data_path: /home/ubuntu/datasets/LOGO/Logo_clf
-    label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
-    augmentations: 
-      - transforms.RandomHorizontalFlip(p=1)
-      - transforms.RandomVerticalFlip(p=1)
-      - transforms.CenterCrop((300, 300))
-      - transforms.Pad((100, 100), padding_mode="edge")
-      - transforms.AutoAugment()
+    label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta_mlclf.csv
+    augmentations: null
     transforms:
       - transforms.Resize((416, 416))
       - transforms.RandomGrayscale(p=0.2)
@@ -23,23 +18,21 @@ datamodule:
     drop_last: False
   
 lightning_module:
-  prob: softmax
+  prob: sigmoid
   model: 
-    name: efficientnet_b3_pretrained
+    name: efficientnet_b5_pretrained
     kwargs:
       num_classes: 392
-    ckpt: null
+    ckpt: /home/ubuntu/yha/AutoTrainer/autotrainer/working/logo_project/logo_clf/0/results/train/ckpt/epoch=004-avg_val_loss=0.9735.ckpt
   loss:
-    name: torch.nn.CrossEntropyLoss
+    name: torch.nn.BCEWithLogitsLoss
     kwargs: {}
   evaluation:
     items:
-      - {name: torchmetrics.Accuracy, kwargs: {}}
-      - {name: AccS, kwargs: {k: 5}}
-      - {name: AccG, kwargs: {k: 5}}
-      - {name: PrecK, kwargs: {k: 5}}
-      - {name: RecK, kwargs: {k: 5}}
-      - {name: F1K, kwargs: {k: 5}}
+      - {name: Precision, kwargs: {k: 5, threshold: 0.5, name: precision}}
+      - {name: Recall, kwargs: {k: 5, threshold: 0.5, name: recall}}
+      - {name: F1, kwargs: {k: 5, threshold: 0.5, name: f1}}
+
   optimizer: 
     name: AdamW
     kwargs: 
@@ -50,7 +43,7 @@ lightning_module:
       T_max: 10
 
 trainer:
-  gpus: [0]
+  gpus: [1]
   min_epochs: 1
   max_epochs: 10
   num_processes: 1
@@ -59,19 +52,19 @@ trainer:
   check_val_every_n_epoch: 1
   fast_dev_run: False
   accumulate_grad_batches: 1
-  precision: 32
+  precision: 16
   weights_summary: top
   auto_lr_find: False
   auto_scale_batch_size: False
   move_metrics_to_cpu: False
   wandb_logger:
     project: Logo_vienna_code_classification
-    name: initial
+    name: eb5_mlclf
 
 callback:
-  callback_cls: LogoImageCallback
+  callback_cls: LogoMultilabelCallback
   num_samples: 32
   data_path: /home/ubuntu/datasets/LOGO/Logo_clf
-  label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
+  label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta_mlclf.csv
   label_col: label
-  k: 5
+  threshold: 0.5

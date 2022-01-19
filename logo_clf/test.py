@@ -1,13 +1,13 @@
 import argparse
 import pandas as pd
-from utils import read_yaml, update_config
 
 import pytorch_lightning as pl
 from pytorch_lightning.loggers import WandbLogger
 
-from callback import *
-from datamodule import LogoDataModule
-from lightning_module import LogoLightningModule
+from logo_clf.utils import read_yaml, update_config
+from logo_clf.callback import *
+from logo_clf.datamodule import LogoDataModule
+from logo_clf.lightning_module import LogoLightningModule
 
 
 def test(config, wandb=False, ckpt=None):
@@ -19,10 +19,7 @@ def test(config, wandb=False, ckpt=None):
     wandb_logger_setting = trainer_params.pop("wandb_logger")
     callbacks = []
     if wandb:
-        wandb_callback = LogoImageCallback(
-            datamodule,
-            **config['callback']
-        )
+        wandb_callback = LogoImageCallback(datamodule, **config["callback"])
         callbacks.append(wandb_callback)
 
         wandb_logger = WandbLogger(**wandb_logger_setting)
@@ -57,5 +54,5 @@ if __name__ == "__main__":
         config["trainer"]["gpus"] = [int(args.device)]
 
     result = test(config, args.wandb, args.ckpt)
-    result_file = args.config.split('/')[-1].replace('.yaml', "")
+    result_file = args.config.split("/")[-1].replace(".yaml", "")
     pd.DataFrame.from_dict(result).to_csv(f"result/{result_file}.csv")

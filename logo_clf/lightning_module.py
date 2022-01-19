@@ -1,9 +1,10 @@
-from autotrainer.model.utils.common import view_x
 import torch
 import torch.nn.functional as F
 import pytorch_lightning as pl
 import torchmetrics
+
 from logo_clf.model.efficientnet_pretrained import *
+from logo_clf.model.vision_transformer import *
 from logo_clf.metric import *
 
 
@@ -142,8 +143,14 @@ class LogoLightningModule(pl.LightningModule):
     def calculate_evaluation(self, predicted, answer, device="cpu"):
         evaluations = dict()
         for idx, metric in enumerate(self.eval_funcs):
-            key = metric.__class__.__name__.lower() + str(idx)
+            try:
+                key = metric.name
+            except:
+                key = metric.__class__.__name__.lower()
             pred = predicted.view(-1, predicted.shape[-1])
-            prob = F.softmax(pred, dim=1)
+            if self.config['prob'] == 'sigmoid':
+                prob = torch.sigmoid(pred)
+            else:
+                prob = F.softmax(pred, dim=1)
             evaluations[key] = metric.to(device)(prob, answer.long())
         return evaluations

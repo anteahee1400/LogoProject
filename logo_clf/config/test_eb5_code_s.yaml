@@ -1,0 +1,53 @@
+datamodule:
+  dataset:
+    label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
+    augmentations: 
+      - null
+    transforms:
+      - transforms.Resize((416, 416))
+      - transforms.ToTensor()
+      - transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+  dataloader:
+    num_workers: 4
+    batch_size: 16
+
+lightning_module:
+  model:
+    name: efficientnet_b5_pretrained
+    kwargs:
+      num_classes: 392
+    ckpt: /home/ubuntu/yha/AutoTrainer/autotrainer/working/logo_project/logo_clf/0/results/train/ckpt/epoch=004-avg_val_loss=0.9735.ckpt
+  evaluation:
+    items:
+      - {name: AccG, kwargs: {k: 1, name: "accg_k1_s"}}
+      - {name: PrecK, kwargs: {k: 1, name: "prec_k1_s"}}
+      - {name: RecK, kwargs: {k: 1, name: "rec_k1_s"}}
+      - {name: F1K, kwargs: {k: 1, name: "f1_k1_s"}}
+      - {name: AccG, kwargs: {k: 3, name: "accg_k3_s"}}
+      - {name: PrecK, kwargs: {k: 3, name: "prec_k3_s"}}
+      - {name: RecK, kwargs: {k: 3, name: "rec_k3_s"}}
+      - {name: F1K, kwargs: {k: 3, name: "f1_k3_s"}}
+      - {name: AccG, kwargs: {k: 5, name: "accg_k5_s"}}
+      - {name: PrecK, kwargs: {k: 5, name: "prec_k5_s"}}
+      - {name: RecK, kwargs: {k: 5, name: "rec_k5_s"}}
+      - {name: F1K, kwargs: {k: 5, name: "f1_k5_s"}}
+      - {name: AccG, kwargs: {k: 7, name: "accg_k7_s"}}
+      - {name: PrecK, kwargs: {k: 7, name: "prec_k7_s"}}
+      - {name: RecK, kwargs: {k: 7, name: "rec_k7_s"}}
+      - {name: F1K, kwargs: {k: 7, name: "f1_k7_s"}}
+      - {name: AccG, kwargs: {k: 9, name: "accg_k9_s"}}
+      - {name: PrecK, kwargs: {k: 9, name: "prec_k9_s"}}
+      - {name: RecK, kwargs: {k: 9, name: "rec_k9_s"}}
+      - {name: F1K, kwargs: {k: 9, name: "f1_k9_s"}}
+
+trainer:
+  wandb_logger:
+    project: Logo_vienna_code_classification
+    name: test_eb5_best_s
+
+callback:
+  num_samples: 32
+  data_path: /home/ubuntu/datasets/LOGO/Logo_clf
+  label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
+  label_col: label
+  k: 5
