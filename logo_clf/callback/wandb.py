@@ -293,106 +293,15 @@ class LogoImageCallback(WandbImageCallback):
 
 
 class LogoMultilabelCallback(LogoImageCallback):
-    def __init__(
-        self,
-        datamodule,
-        gradcam=False,
-        target_layer="_blocks",
-        fc_layer="_fc",
-        data_path=None,
-        label_col="label",
-        label_path=None,
-        mapper_path=None,
-        k=5,
-        threshold=0.5,
-        **kwargs,
-    ):
-        super().__init__(
-            datamodule,
-            gradcam=gradcam,
-            target_layer=target_layer,
-            fc_layer=fc_layer,
-            data_path=data_path,
-            label_col=label_col,
-            label_path=label_path,
-            mapper_path=mapper_path,
-            k=k,
-        )
-        self.threshold = threshold
-
-    def log_table(self, real_imgs, labels, probabilities, predictions, columns=["image", "label"], max_len=5):
-        if isinstance(labels, list):
-            labels = [
-                [self.mapper.get(str(l), "none") for l in label.cpu().numpy()]
-                for label in labels
-            ]
-        else:
-            labels = [self.mapper.get(str(l), "none") for l in labels.cpu().numpy()]
-        
-        predimgs = [self.get_imgs_from_mapper(preds.cpu().numpy()) for preds in predictions]
-
-        wandbimgs = []
-        for preds, probs, lists_of_imgs in zip(
-            predictions, probabilities, predimgs
-        ):
-            wandbimgs.append(
-                [
-                    (
-                        self.mapper.get(str(l), str(l)),
-                        f"{round(p*100, 3)}%",
-                        wandb.Image(im[0]),
-                    )
-                    for l, p, im in zip(preds.cpu().numpy(), probs.cpu().numpy(), lists_of_imgs)
-                ]
-            )
-
-        col_len = len(columns)
-        for i in range(max_len):
-            columns.append(f"pred_{i}_label")
-            columns.append(f"pred_{i}_prob")
-            columns.append(f"pred_{i}_image")
-
-        all_data = []
-        for img, label, limlist in zip(real_imgs, labels, wandbimgs):
-            if isinstance(label, list):
-                data = [wandb.Image(img), *label]
-                extend_len = max(col_len - len(data), 0)
-                data.extend(["x"] * extend_len)
-            else:
-                data = [wandb.Image(img), label]
-            for k, p, w in limlist:
-                data.append(k)
-                data.append(p)
-                data.append(w)          
-            data.extend([None] * (len(columns)-len(data)))
-            all_data.append(data[:len(columns)])
-        
-        test_table = wandb.Table(
-            columns=columns,
-            data=all_data,
-        )
-        return test_table
-    
-
     def on_validation_epoch_end(self, trainer, pl_module):
         val_imgs = self.val_imgs.to(device=pl_module.device)
         val_labels = self.val_labels.to(device=pl_module.device)
 
         logits = pl_module.model.forward(val_imgs)
-        probs = torch.sigmoid(logits)
-        preds = torch.where(
-            probs > self.threshold,
-            torch.ones_like(val_labels),
-            torch.zeros_like(val_labels),
-        )
-
-        max_len = 1
-        max_pred_len = 1
-        if len(val_labels.shape) == 2:
-            val_labels, max_len = split_multi_hot(val_labels)
-            preds, max_pred_len = split_multi_hot(preds)
-            probs = [p[pr] for p, pr in zip(probs, preds)]
-            
+        scores = torch.sigmoid(logits)
+        batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
+        batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
+        
         ## gradcam
         model = pl_module.model
         if self.gradcam:
@@ -404,13 +313,10 @@ class LogoMultilabelCallback(LogoImageCallback):
                 fc_layer=self.fc_layer,
                 size=416,
             )
-            
+
         # table
-        columns = ["image"]
-        for i in range(max_len):
-            columns.append(f"label{i}")
         val_table = self.log_table(
-            val_imgs, val_labels, probs, preds, columns=columns, max_len=max_pred_len
+            val_imgs, val_labels, batch_k_probs, batch_k_preds, columns=["image", "label"]
         )
 
         trainer.logger.experiment.log(
@@ -427,21 +333,15 @@ class LogoMultilabelCallback(LogoImageCallback):
     def on_test_epoch_end(self, trainer, pl_module):
         test_imgs = self.test_imgs.to(device=pl_module.device)
         test_labels = self.test_labels.to(device=pl_module.device)
-        logits = pl_module.model.forward(test_imgs)
-        probs = torch.sigmoid(logits)
-        preds = torch.where(
-            probs > self.threshold,
-            torch.ones_like(test_labels),
-            torch.zeros_like(test_labels),
-        )
-
         max_len = 1
-        max_pred_len = 1
         if len(test_labels.shape) == 2:
             test_labels, max_len = split_multi_hot(test_labels)
-            preds, max_pred_len = split_multi_hot(preds)
-            probs = [p[pr] for p, pr in zip(probs, preds)]
-            
+
+        logits = pl_module.model.forward(test_imgs)
+        scores = torch.sigmoid(logits)
+        batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
+        batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
+        
         ## gradcam
         model = pl_module.model
         if self.gradcam:
@@ -459,7 +359,7 @@ class LogoMultilabelCallback(LogoImageCallback):
         for i in range(max_len):
             columns.append(f"label{i}")
         test_table = self.log_table(
-            test_imgs, test_labels, probs, preds, columns=columns, max_len=5
+            test_imgs, test_labels, batch_k_probs, batch_k_preds, columns=columns
         )
 
         trainer.logger.experiment.log(
@@ -474,122 +374,184 @@ class LogoMultilabelCallback(LogoImageCallback):
         )
 
 
-class LogoObjCallback(LogoImageCallback):
-    def on_validation_epoch_end(self, trainer, pl_module):
-        val_imgs = self.val_imgs.to(device=pl_module.device)
-        val_labels = [
-            {k: v.to(device=pl_module.device) for k, v in label.items()}
-            for label in self.val_labels
-        ]
+# class LogoMultilabelCallback(LogoImageCallback):
+#     def __init__(
+#         self,
+#         datamodule,
+#         gradcam=False,
+#         target_layer="_blocks",
+#         fc_layer="_fc",
+#         data_path=None,
+#         label_col="label",
+#         label_path=None,
+#         mapper_path=None,
+#         k=5,
+#         threshold=0.5,
+#         **kwargs,
+#     ):
+#         super().__init__(
+#             datamodule,
+#             gradcam=gradcam,
+#             target_layer=target_layer,
+#             fc_layer=fc_layer,
+#             data_path=data_path,
+#             label_col=label_col,
+#             label_path=label_path,
+#             mapper_path=mapper_path,
+#             k=k,
+#         )
+#         self.threshold = threshold
 
-        logits = pl_module.model.forward(
-            val_imgs
-        )  # {"pred_logits":torch.Size([32, 100, 84]), "pred_boxes":torch.Size([32, 100, 4])}
+#     def log_table(self, real_imgs, labels, probabilities, predictions, columns=["image", "label"], max_len=5):
+#         if isinstance(labels, list):
+#             labels = [
+#                 [self.mapper.get(str(l), "none") for l in label.cpu().numpy()]
+#                 for label in labels
+#             ]
+#         else:
+#             labels = [self.mapper.get(str(l), "none") for l in labels.cpu().numpy()]
+        
+#         predimgs = [self.get_imgs_from_mapper(preds.cpu().numpy()) for preds in predictions]
 
-        # bboxes
-        test_table = self.log_table(
-            val_imgs, val_labels, logits, pl_module.device, p=0.7
-        )
+#         wandbimgs = []
+#         for preds, probs, lists_of_imgs in zip(
+#             predictions, probabilities, predimgs
+#         ):
+#             wandbimgs.append(
+#                 [
+#                     (
+#                         self.mapper.get(str(l), str(l)),
+#                         f"{round(p*100, 3)}%",
+#                         wandb.Image(im[0]),
+#                     )
+#                     for l, p, im in zip(preds.cpu().numpy(), probs.cpu().numpy(), lists_of_imgs)
+#                 ]
+#             )
 
-        trainer.logger.experiment.log(
-            {
-                "test_table": test_table,
-            },
-            commit=False,
-        )
+#         col_len = len(columns)
+#         for i in range(max_len):
+#             columns.append(f"pred_{i}_label")
+#             columns.append(f"pred_{i}_prob")
+#             columns.append(f"pred_{i}_image")
 
-    def resize(self, img, size):
-        res = transforms.Resize(size)
-        return res(img)
+#         all_data = []
+#         for img, label, limlist in zip(real_imgs, labels, wandbimgs):
+#             if isinstance(label, list):
+#                 data = [wandb.Image(img), *label]
+#                 extend_len = max(col_len - len(data), 0)
+#                 data.extend(["x"] * extend_len)
+#             else:
+#                 data = [wandb.Image(img), label]
+#             for k, p, w in limlist:
+#                 data.append(k)
+#                 data.append(p)
+#                 data.append(w)          
+#             data.extend([None] * (len(columns)-len(data)))
+#             all_data.append(data[:len(columns)])
+        
+#         test_table = wandb.Table(
+#             columns=columns,
+#             data=all_data,
+#         )
+#         return test_table
+    
 
-    def box_cxcywh_to_xyxy(self, x):
-        x_c, y_c, w, h = x.unbind(1)
-        b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
-        return torch.stack(b, dim=1)
+#     def on_validation_epoch_end(self, trainer, pl_module):
+#         val_imgs = self.val_imgs.to(device=pl_module.device)
+#         val_labels = self.val_labels.to(device=pl_module.device)
 
-    def rescale_bboxes(self, out_bbox, size, device):
-        img_w, img_h = size
-        b = self.box_cxcywh_to_xyxy(out_bbox)
-        b = b * torch.tensor([img_w, img_h, img_w, img_h], dtype=torch.float32).to(
-            device
-        )
-        return b
+#         logits = pl_module.model.forward(val_imgs)
+#         probs = torch.sigmoid(logits)
+#         preds = torch.where(
+#             probs > self.threshold,
+#             torch.ones_like(val_labels),
+#             torch.zeros_like(val_labels),
+#         )
 
-    def log_table(self, real_imgs, labels, outputs, device, p=0.7):
+#         max_len = 1
+#         max_pred_len = 1
+#         if len(val_labels.shape) == 2:
+#             val_labels, max_len = split_multi_hot(val_labels)
+#             preds, max_pred_len = split_multi_hot(preds)
+#             probs = [p[pr] for p, pr in zip(probs, preds)]
+            
+#         ## gradcam
+#         model = pl_module.model
+#         if self.gradcam:
+#             gradcams, originals = self.gradcams(
+#                 model,
+#                 val_imgs,
+#                 val_labels,
+#                 target_layer=self.target_layer,
+#                 fc_layer=self.fc_layer,
+#                 size=416,
+#             )
+            
+#         # table
+#         columns = ["image"]
+#         for i in range(max_len):
+#             columns.append(f"label{i}")
+#         val_table = self.log_table(
+#             val_imgs, val_labels, probs, preds, columns=columns, max_len=max_pred_len
+#         )
 
-        bboxes = []
-        for i in range(len(labels)):
-            img = real_imgs.tensors[i]
-            label = labels[i]
-            size = list(label["size"].cpu().numpy())
-            pred_logit = outputs["pred_logits"][i]
-            pred_box = outputs["pred_boxes"][i]
+#         trainer.logger.experiment.log(
+#             {
+#                 "val_predictions": val_table,
+#                 "originals": originals,
+#                 "gradcams": gradcams,
+#             }
+#             if self.gradcam
+#             else {"val_predictions": val_table},
+#             commit=False,
+#         )
 
-            bbox = self.bounding_box(
-                img, label, pred_logit, pred_box, size, device, p=p
-            )
-            # test_table.add_data(true_bbox, pred_bbox)
-            bboxes.append(bbox)
+#     def on_test_epoch_end(self, trainer, pl_module):
+#         test_imgs = self.test_imgs.to(device=pl_module.device)
+#         test_labels = self.test_labels.to(device=pl_module.device)
+#         logits = pl_module.model.forward(test_imgs)
+#         probs = torch.sigmoid(logits)
+#         preds = torch.where(
+#             probs > self.threshold,
+#             torch.ones_like(test_labels),
+#             torch.zeros_like(test_labels),
+#         )
 
-        return bboxes
+#         max_len = 1
+#         max_pred_len = 1
+#         if len(test_labels.shape) == 2:
+#             test_labels, max_len = split_multi_hot(test_labels)
+#             preds, max_pred_len = split_multi_hot(preds)
+#             probs = [p[pr] for p, pr in zip(probs, preds)]
+            
+#         ## gradcam
+#         model = pl_module.model
+#         if self.gradcam:
+#             gradcams, originals = self.gradcams(
+#                 model,
+#                 test_imgs,
+#                 test_labels,
+#                 target_layer=self.target_layer,
+#                 fc_layer=self.fc_layer,
+#                 size=416,
+#             )
 
-    def bounding_box(self, img, label, pred_logit, pred_box, size, device, p=0.7):
-        img = self.resize(img, size)
-        class_id_to_label = {int(k): v for k, v in self.mapper.items()}
-        t_boxes = self.rescale_bboxes(label["boxes"], size, device)
-        t_boxes = t_boxes.cpu().numpy()
-        all_t_boxes = []
-        for b_i, box in enumerate(t_boxes):
-            class_id = label["labels"][b_i].item()
-            box_data = {
-                "position": {
-                    "minX": float(box[0]),
-                    "maxX": float(box[2]),
-                    "minY": float(box[1]),
-                    "maxY": float(box[3]),
-                },
-                "class_id": class_id,
-                "box_caption": class_id_to_label.get(class_id, "none"),
-                "domain": "pixel",
-            }
-            all_t_boxes.append(box_data)
+#         # table
+#         columns = ["image"]
+#         for i in range(max_len):
+#             columns.append(f"label{i}")
+#         test_table = self.log_table(
+#             test_imgs, test_labels, probs, preds, columns=columns, max_len=5
+#         )
 
-        probs = pred_logit.softmax(-1)
-        max_probs = probs[:, :-1].max(-1).values
-        keep = max_probs > p
+#         trainer.logger.experiment.log(
+#             {
+#                 "test_predictions": test_table,
+#                 "originals": originals,
+#                 "gradcams": gradcams,
+#             }
+#             if self.gradcam
+#             else {"test_predictions": test_table},
+#             commit=False,
+#         )
 
-        argmaxs = probs.argmax(-1).detach().cpu().numpy()
-        p_boxes = self.rescale_bboxes(pred_box, size, device)
-        p_boxes = p_boxes.detach().cpu().numpy()
-        all_p_boxes = []
-        for b_i, (l, box) in enumerate(zip(argmaxs, p_boxes)):
-            class_id = int(l)
-            if class_id != int(probs.shape[-1]) - 1:
-                box_data = {
-                    "position": {
-                        "minX": float(box[0]),
-                        "maxX": float(box[2]),
-                        "minY": float(box[1]),
-                        "maxY": float(box[3]),
-                    },
-                    "class_id": class_id,
-                    "box_caption": class_id_to_label.get(class_id, str(class_id)),
-                    "domain": "pixel",
-                    "scores": {"score": max_probs[b_i].item()},
-                }
-                all_p_boxes.append(box_data)
-
-        box_image = wandb.Image(
-            img,
-            boxes={
-                "predictions": {
-                    "box_data": all_p_boxes,
-                    "class_labels": class_id_to_label,
-                },
-                "ground_truth": {
-                    "box_data": all_t_boxes,
-                    "class_labels": class_id_to_label,
-                },
-            },
-        )
-        return box_image

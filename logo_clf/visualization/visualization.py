@@ -65,7 +65,13 @@ def class_balance(df, class_name="code_s", visual=False, **kwargs):
     Returns:
         grouped data frame (infomation of class name and it's count)
     """
-    mapping_dict = mapper(df, key=class_name)
+    if class_name.endswith("s"):
+        value = "desc_s_ko"
+    elif class_name.endswith("m"):
+        value = "desc_m_ko"
+    else:
+        value = "desc_l_ko"
+    mapping_dict = mapper(df, key=class_name, value=value)
     df = code_to_str(df)
     df = (
         df.groupby(class_name)
@@ -75,6 +81,7 @@ def class_balance(df, class_name="code_s", visual=False, **kwargs):
         .reset_index(drop=True)
     )
     df = df[[class_name, "path"]].rename(columns={"path": "count"})
+    df["ratio"] = df["count"].apply(lambda x: round((x / df["count"].sum()) * 100, 3))
     df["desc"] = df[class_name].apply(lambda x: mapping_dict[x])
     if visual:
         bar(df, "Class Distribution", **kwargs)
@@ -145,10 +152,6 @@ def median_image_ratio(df):
     """
     df = df[["width", "height"]].describe()
     return df.loc["50%"].width, df.loc["50%"].height
-
-
-def dimension_insights():
-    pass
 
 
 def annotation_heatmap(df, split="train", label="all"):

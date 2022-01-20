@@ -19,11 +19,14 @@ def test(config, wandb=False, ckpt=None):
     wandb_logger_setting = trainer_params.pop("wandb_logger")
     callbacks = []
     if wandb:
-        wandb_callback = LogoImageCallback(datamodule, **config["callback"])
-        callbacks.append(wandb_callback)
 
         wandb_logger = WandbLogger(**wandb_logger_setting)
         trainer_params.update({"logger": wandb_logger})
+        
+        wandb_callback_params = config["callback"]
+        wandb_callback_cls = wandb_callback_params.pop("callback_cls")
+        wandb_callback = eval(wandb_callback_cls)(datamodule, **wandb_callback_params)
+        callbacks.append(wandb_callback)
 
     trainer = pl.Trainer(callbacks=callbacks, **trainer_params)
     result = trainer.test(lightning_module, datamodule)

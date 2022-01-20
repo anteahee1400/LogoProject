@@ -12,6 +12,12 @@ from logo_clf.model.vision_transformer import *
 from logo_clf.utils import read_json
 
 
+def calc_prob(logit, prob_type="softmax"):
+    if prob_type == "sigmoid":
+        return torch.sigmoid(logit)
+    return F.softmax(logit, dim=-1)
+
+
 def transform(img, size=(416, 416)):
     tran = transforms.Compose(
         [
@@ -40,59 +46,77 @@ def main():
         unsafe_allow_html=True,
     )
 
-    
-
     desc_mapper = read_json("data/label_s_to_desc_s_ko.json")
     code_mapper = read_json("data/label_s_to_code_s.json")
     k = st.sidebar.number_input("top K prediction", value=5)
-    device = st.sidebar.selectbox("device", options=['cuda:0', 'cuda:1', 'cpu'])
+    device = st.sidebar.selectbox("device", options=["cuda:0", "cuda:1", "cpu"])
     st.sidebar.header("Vienna code")
-    df = pd.DataFrame({"label":list(desc_mapper.keys()), "desc":list(desc_mapper.values())})
+    df = pd.DataFrame(
+        {"label": list(desc_mapper.keys()), "desc": list(desc_mapper.values())}
+    )
     st.sidebar.dataframe(df)
-    # outputsize = st.sidebar.selectbox("Output Size", [28, 56, 224, 400])
 
     image = st.file_uploader("Upload number image", type=["jpg", "jpeg", "png"])
     run = st.button("RUN")
     col1, col2 = st.columns(2)
-    
+
     if image is not None:
-            
+
         image = image.read()
         image = Image.open(io.BytesIO(image)).convert("RGB")
         col1.image(image, width=400)
-    
+
     if run:
         device = torch.device(device)
-        model = model_load("/home/ubuntu/yha/AutoTrainer/autotrainer/working/logo_project/logo_clf/0/results/train/ckpt/epoch=004-avg_val_loss=0.9735.ckpt")
+        model = model_load(
+            "ckpt/efficientnet_b5_pretrained-epoch=002--valid_precision_epoch=0.7726.ckpt"
+        )
         model.eval()
         model.to(device)
-        if image is not None:        
+        if image is not None:
             input_image = transform(image).to(device)
             start = time.time()
             prediction = model(input_image.unsqueeze(0))
             end = time.time()
-            inference_time = end-start
-            probability = F.softmax(prediction, dim=1)
+            inference_time = end - start
+            for prob_type in ["softmax", "sigmoid"]:
+                probability = calc_prob(prediction, prob_type=prob_type)
 
-            probs = (
-                probability.sort(dim=1, descending=True)
-                .values.cpu()
-                .detach()
-                .numpy()[0]
-                .tolist()[:k]
-            )
-            indices = (
-                probability.sort(dim=1, descending=True)
-                .indices.cpu()
-                .detach()
-                .numpy()[0]
-                .tolist()[:k]
-            )
-            description = [desc_mapper[str(i)] for i in indices]
-            codes = [code_mapper[str(i)] for i in indices]
-            df = pd.DataFrame({"label": indices, "code": codes, "description":description, "prob": [f"{round(p*100, 3)}%" for p in probs]})
-            col2.dataframe(df)
-            col2.text(f"inference time: {round(inference_time, 3)}s")
+                probs = (
+                    probability.sort(dim=1, descending=True)
+                    .values.cpu()
+                    .detach()
+                    .numpy()[0]
+                    .tolist()[:k]
+                )
+                indices = (
+                    probability.sort(dim=1, descending=True)
+                    .indices.cpu()
+                    .detach()
+                    .numpy()[0]
+                    .tolist()[:k]
+                )
+                description = [desc_mapper[str(i)] for i in indices]
+                codes = [code_mapper[str(i)] for i in indices]
+                df = pd.DataFrame(
+                    {
+                        "label": indices,
+                        "code": codes,
+                        "description": description,
+                        "prob": probs,
+                    }
+                )
+
+                if prob_type == "softmax":
+                    col2.text("Top K prediction")
+                else:
+                    col2.text("Precise prediction")
+                    df = df[df.prob > 0.5]
+
+                df["prob"] = df["prob"].apply(lambda x: f"{round(x*100, 3)}%")
+                col2.dataframe(df)
+        st.text(f"inference time: {round(inference_time, 3)}s")
+
 
 if __name__ == "__main__":
     main()

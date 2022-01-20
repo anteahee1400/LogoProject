@@ -129,16 +129,20 @@ def stratified_sampling(df):
 
 
 def split_multi_hot(label):
-    try:
-        batch_ids, batch_labels = torch.where(label == 1)
-        labels = [[] for _ in range(label.shape[0])]
-        for i, idx in enumerate(batch_ids):
-            labels[idx].append(batch_labels[i])
-        labels = [torch.stack(l) for l in labels]
-        max_len = max([len(l) for l in labels])
-        return labels, max_len
-    except:
-        return [torch.tensor([0])]*len(label), 1
+    device = label.device
+    batch_ids, batch_labels = torch.where(label == 1)
+    labels = [[] for _ in range(label.shape[0])]
+    for i, idx in enumerate(batch_ids):
+        labels[idx].append(batch_labels[i])
+    
+    for i in range(len(labels)):
+        l = labels[i]
+        if not l:
+            labels[i] = [torch.tensor(0).to(device)]
+        
+    labels = [torch.stack(l) for l in labels]
+    max_len = max([len(l) for l in labels])
+    return labels, max_len
 
 def concat_multi_hot(label_unstack, num_classes):
     device = label_unstack[0].device
