@@ -1,8 +1,8 @@
 datamodule:
   dataset:
-    dataset_cls: LogoMultilabelDataset
+    dataset_cls: LogoDataset
     data_path: /home/ubuntu/datasets/LOGO/Logo_clf
-    label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta_mlclf.csv
+    label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
     augmentations: null
     transforms:
       - transforms.Resize((416, 416))
@@ -25,13 +25,15 @@ lightning_module:
       num_classes: 392
     ckpt: /home/ubuntu/yha/LogoProject/logo_clf/ckpt/efficientnet_b5_pretrained-epoch=006--valid_precision_epoch=0.7432.ckpt
   loss:
-    name: torch.nn.BCEWithLogitsLoss
+    name: torch.nn.CrossEntropyLoss
     kwargs: {}
   evaluation:
     items:
-      - {name: Precision, kwargs: {k: 5, threshold: 0.5, name: precision}}
-      - {name: Recall, kwargs: {k: 5, threshold: 0.5, name: recall}}
-      - {name: F1, kwargs: {k: 5, threshold: 0.5, name: f1}}
+      - {name: torchmetrics.Accuracy, kwargs: {}}
+      - {name: AccG, kwargs: {k: 5, name: accg}}
+      - {name: PrecK, kwargs: {k: 5, name: preck}}
+      - {name: RecK, kwargs: {k: 5, name: reck}}
+      - {name: F1K, kwargs: {k: 5, name: f1k}}
 
   optimizer: 
     name: AdamW
@@ -59,11 +61,11 @@ trainer:
   move_metrics_to_cpu: False
   wandb_logger:
     project: Logo_vienna_code_classification
-    name: eb5_mlclf_test
+    name: eb5_test
 
 callback:
-  callback_cls: LogoMultilabelCallback
+  callback_cls: LogoImageCallback
   num_samples: 8
   data_path: /home/ubuntu/datasets/LOGO/Logo_clf
-  label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta_mlclf.csv
+  label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
   label_col: label

@@ -13,18 +13,9 @@ def train(config, wandb=False):
     lightning_module = LogoLightningModule(config["lightning_module"])
     datamodule = LogoDataModule(config["datamodule"])
     trainer_params = config["trainer"]
-
-    model_name = config["lightning_module"]["model"]["name"] + "-"
-    eval_metric = config["lightning_module"]["evaluation"]["items"][0]
-    ckpt_monitor = eval_metric["kwargs"].get(
-        "name", eval_metric["name"].split(".")[-1].lower()
-    )
-    ckpt_monitor = f"valid_{ckpt_monitor}_epoch"
-
+    
     callbacks = []
-    ckpt_callback = checkpoint_callback(
-        dir_path="ckpt", name=model_name, monitor=ckpt_monitor, save_top_k=-1
-    )
+    ckpt_callback = checkpoint_callback(config)
     callbacks.append(ckpt_callback)
 
     wandb_logger_setting = trainer_params.pop("wandb_logger")

@@ -5,6 +5,7 @@ from PIL import Image
 
 import pytorch_lightning as pl
 import torch
+import torch.nn.functional as F
 from torchvision import transforms
 import wandb
 
@@ -128,6 +129,7 @@ class LogoImageCallback(WandbImageCallback):
         if self.data_path.name != "train_folder":
             self.data_path = self.data_path / "train_folder"
         self.default_imgpath = "x.jpg"
+        self.prob_type = "softmax"
 
     def load_mapper(self, path):
         if path is not None:
@@ -160,12 +162,20 @@ class LogoImageCallback(WandbImageCallback):
             all_imgs.append(imgs)
         return all_imgs
 
+    def calc_prob(self, logit):
+        if self.prob_type == "sigmoid":
+            return torch.sigmoid(logit)
+        return F.softmax(logit, dim=-1)
+
     def on_validation_epoch_end(self, trainer, pl_module):
         val_imgs = self.val_imgs.to(device=pl_module.device)
         val_labels = self.val_labels.to(device=pl_module.device)
-
+        max_len = 1
+        if len(val_labels.shape) == 2:
+            val_labels, max_len = split_multi_hot(val_labels)
+            
         logits = pl_module.model.forward(val_imgs)
-        scores = torch.nn.functional.softmax(logits, dim=-1)
+        scores = self.calc_prob(logits)
         batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
         batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
         
@@ -182,8 +192,11 @@ class LogoImageCallback(WandbImageCallback):
             )
 
         # table
+        columns = ["image"]
+        for i in range(max_len):
+            columns.append(f"label{i}")
         val_table = self.log_table(
-            val_imgs, val_labels, batch_k_probs, batch_k_preds, columns=["image", "label"]
+            val_imgs, val_labels, batch_k_probs, batch_k_preds, columns=columns
         )
 
         trainer.logger.experiment.log(
@@ -205,7 +218,7 @@ class LogoImageCallback(WandbImageCallback):
             test_labels, max_len = split_multi_hot(test_labels)
 
         logits = pl_module.model.forward(test_imgs)
-        scores = torch.nn.functional.softmax(logits, dim=-1)
+        scores = self.calc_prob(logits)
         batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
         batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
         
@@ -293,85 +306,111 @@ class LogoImageCallback(WandbImageCallback):
 
 
 class LogoMultilabelCallback(LogoImageCallback):
-    def on_validation_epoch_end(self, trainer, pl_module):
-        val_imgs = self.val_imgs.to(device=pl_module.device)
-        val_labels = self.val_labels.to(device=pl_module.device)
-
-        logits = pl_module.model.forward(val_imgs)
-        scores = torch.sigmoid(logits)
-        batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
-        batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
+    def __init__(
+        self,
+        datamodule,
+        gradcam=False,
+        target_layer="_blocks",
+        fc_layer="_fc",
+        data_path=None,
+        label_col="label",
+        label_path=None,
+        mapper_path=None,
+        k=5,
+        **kwargs,
+    ):
+        super().__init__(
+            datamodule, 
+            gradcam=gradcam, 
+            target_layer=target_layer, 
+            fc_layer=fc_layer, 
+            data_path=data_path,
+            label_col=label_col,
+            label_path=label_path,
+            mapper_path=mapper_path,
+            k=k,
+        )
+        self.prob_type = "sigmoid"
         
-        ## gradcam
-        model = pl_module.model
-        if self.gradcam:
-            gradcams, originals = self.gradcams(
-                model,
-                val_imgs,
-                val_labels,
-                target_layer=self.target_layer,
-                fc_layer=self.fc_layer,
-                size=416,
-            )
+    # def on_validation_epoch_end(self, trainer, pl_module):
+    #     val_imgs = self.val_imgs.to(device=pl_module.device)
+    #     val_labels = self.val_labels.to(device=pl_module.device)
 
-        # table
-        val_table = self.log_table(
-            val_imgs, val_labels, batch_k_probs, batch_k_preds, columns=["image", "label"]
-        )
-
-        trainer.logger.experiment.log(
-            {
-                "val_predictions": val_table,
-                "originals": originals,
-                "gradcams": gradcams,
-            }
-            if self.gradcam
-            else {"val_predictions": val_table},
-            commit=False,
-        )
-
-    def on_test_epoch_end(self, trainer, pl_module):
-        test_imgs = self.test_imgs.to(device=pl_module.device)
-        test_labels = self.test_labels.to(device=pl_module.device)
-        max_len = 1
-        if len(test_labels.shape) == 2:
-            test_labels, max_len = split_multi_hot(test_labels)
-
-        logits = pl_module.model.forward(test_imgs)
-        scores = torch.sigmoid(logits)
-        batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
-        batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
+    #     logits = pl_module.model.forward(val_imgs)
+    #     scores = torch.sigmoid(logits)
+    #     batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
+    #     batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
         
-        ## gradcam
-        model = pl_module.model
-        if self.gradcam:
-            gradcams, originals = self.gradcams(
-                model,
-                test_imgs,
-                test_labels,
-                target_layer=self.target_layer,
-                fc_layer=self.fc_layer,
-                size=416,
-            )
+    #     ## gradcam
+    #     model = pl_module.model
+    #     if self.gradcam:
+    #         gradcams, originals = self.gradcams(
+    #             model,
+    #             val_imgs,
+    #             val_labels,
+    #             target_layer=self.target_layer,
+    #             fc_layer=self.fc_layer,
+    #             size=416,
+    #         )
 
-        # table
-        columns = ["image"]
-        for i in range(max_len):
-            columns.append(f"label{i}")
-        test_table = self.log_table(
-            test_imgs, test_labels, batch_k_probs, batch_k_preds, columns=columns
-        )
+    #     # table
+    #     val_table = self.log_table(
+    #         val_imgs, val_labels, batch_k_probs, batch_k_preds, columns=["image", "label"]
+    #     )
 
-        trainer.logger.experiment.log(
-            {
-                "test_predictions": test_table,
-                "originals": originals,
-                "gradcams": gradcams,
-            }
-            if self.gradcam
-            else {"test_predictions": test_table},
-            commit=False,
-        )
+    #     trainer.logger.experiment.log(
+    #         {
+    #             "val_predictions": val_table,
+    #             "originals": originals,
+    #             "gradcams": gradcams,
+    #         }
+    #         if self.gradcam
+    #         else {"val_predictions": val_table},
+    #         commit=False,
+    #     )
+
+    # def on_test_epoch_end(self, trainer, pl_module):
+    #     test_imgs = self.test_imgs.to(device=pl_module.device)
+    #     test_labels = self.test_labels.to(device=pl_module.device)
+    #     max_len = 1
+    #     if len(test_labels.shape) == 2:
+    #         test_labels, max_len = split_multi_hot(test_labels)
+
+    #     logits = pl_module.model.forward(test_imgs)
+    #     scores = torch.sigmoid(logits)
+    #     batch_k_probs = scores.sort(dim=1, descending=True).values[:, :self.k].cpu().numpy()
+    #     batch_k_preds = scores.argsort(dim=1, descending=True)[:, :self.k].cpu().numpy()
+        
+    #     ## gradcam
+    #     model = pl_module.model
+    #     if self.gradcam:
+    #         gradcams, originals = self.gradcams(
+    #             model,
+    #             test_imgs,
+    #             test_labels,
+    #             target_layer=self.target_layer,
+    #             fc_layer=self.fc_layer,
+    #             size=416,
+    #         )
+
+    #     # table
+    #     columns = ["image"]
+    #     for i in range(max_len):
+    #         columns.append(f"label{i}")
+    #     test_table = self.log_table(
+    #         test_imgs, test_labels, batch_k_probs, batch_k_preds, columns=columns
+    #     )
+
+    #     trainer.logger.experiment.log(
+    #         {
+    #             "test_predictions": test_table,
+    #             "originals": originals,
+    #             "gradcams": gradcams,
+    #         }
+    #         if self.gradcam
+    #         else {"test_predictions": test_table},
+    #         commit=False,
+    #     )
 
 
 # class LogoMultilabelCallback(LogoImageCallback):

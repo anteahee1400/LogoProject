@@ -1,3 +1,4 @@
+import os
 import time
 from PIL import Image
 import pandas as pd
@@ -50,6 +51,11 @@ def main():
     code_mapper = read_json("data/label_s_to_code_s.json")
     k = st.sidebar.number_input("top K prediction", value=5)
     device = st.sidebar.selectbox("device", options=["cuda:0", "cuda:1", "cpu"])
+    ckpt_dir = st.sidebar.selectbox("ckpt", options=os.listdir("ckpt"))
+    ckpt_dir = os.path.join("ckpt", ckpt_dir)
+    last_ckpt_file = os.listdir(ckpt_dir)[-1]
+    ckpt = os.path.join(ckpt_dir, last_ckpt_file)
+    
     st.sidebar.header("Vienna code")
     df = pd.DataFrame(
         {"label": list(desc_mapper.keys()), "desc": list(desc_mapper.values())}
@@ -68,9 +74,7 @@ def main():
 
     if run:
         device = torch.device(device)
-        model = model_load(
-            "ckpt/efficientnet_b5_pretrained-epoch=002--valid_precision_epoch=0.7726.ckpt"
-        )
+        model = model_load(ckpt)
         model.eval()
         model.to(device)
         if image is not None:

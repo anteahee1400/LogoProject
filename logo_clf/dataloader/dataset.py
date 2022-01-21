@@ -74,8 +74,8 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
 
     def __len__(self):
         # return len(self.data_files)  # label_df
-        return self.len_grouped_label_df * (self.len_augmentations + 1)
-        # return 128
+        # return self.len_grouped_label_df * (self.len_augmentations + 1)
+        return 128
 
     def __getitem__(self, idx):
 
