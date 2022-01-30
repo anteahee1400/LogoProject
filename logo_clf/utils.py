@@ -148,3 +148,7 @@ def concat_multi_hot(label_unstack, num_classes):
     device = label_unstack[0].device
     unstack = [F.one_hot(label, num_classes).sum(dim=0) > 0 for label in label_unstack]
     return torch.stack(unstack).to(device)
+
+
+def calculate_number_of_parameters(model):
+    return sum([p.numel() for p in model.parameters() if p.requires_grad])
