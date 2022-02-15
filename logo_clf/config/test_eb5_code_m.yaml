@@ -46,6 +46,7 @@ trainer:
     name: test_eb5_best_m
 
 callback:
+  callback_cls: LogoImageCallback
   num_samples: 32
   data_path: /home/ubuntu/datasets/LOGO/Logo_clf
   label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv

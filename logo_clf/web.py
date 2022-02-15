@@ -80,7 +80,8 @@ def main():
         if image is not None:
             input_image = transform(image).to(device)
             start = time.time()
-            prediction = model(input_image.unsqueeze(0))
+            with torch.no_grad():
+                prediction = model(input_image.unsqueeze(0))
             end = time.time()
             inference_time = end - start
             for prob_type in ["softmax", "sigmoid"]:

@@ -1,5 +1,7 @@
 datamodule:
   dataset:
+    dataset_cls: LogoMultilabelDataset
+    data_path: /home/ubuntu/datasets/LOGO/Logo_clf
     label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
     augmentations: 
       - null
@@ -8,8 +10,8 @@ datamodule:
       - transforms.ToTensor()
       - transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
   dataloader:
-    num_workers: 4
-    batch_size: 16
+    num_workers: 16
+    batch_size: 32
 
 lightning_module:
   model:
@@ -46,6 +48,7 @@ trainer:
     name: test_eb5_best_s
 
 callback:
+  callback_cls: LogoImageCallback
   num_samples: 32
   data_path: /home/ubuntu/datasets/LOGO/Logo_clf
   label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv

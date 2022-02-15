@@ -68,8 +68,10 @@ trainer:
     name: initial
 
 callback:
-  num_samples: 32
+  callback_cls: LogoImageCallback
+  num_samples: 8
   data_path: /home/ubuntu/datasets/LOGO/Logo_clf
   label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
   label_col: label
+  gradcam: true
   k: 5

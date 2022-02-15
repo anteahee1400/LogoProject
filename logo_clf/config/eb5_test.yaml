@@ -69,3 +69,4 @@ callback:
   data_path: /home/ubuntu/datasets/LOGO/Logo_clf
   label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta.csv
   label_col: label
+  gradcam: true
