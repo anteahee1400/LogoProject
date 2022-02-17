@@ -62,7 +62,7 @@ def main():
     )
     st.sidebar.dataframe(df)
 
-    image = st.file_uploader("Upload number image", type=["jpg", "jpeg", "png"])
+    image = st.file_uploader("Upload your image", type=["jpg", "jpeg", "png"])
     run = st.button("RUN")
     col1, col2 = st.columns(2)
 
