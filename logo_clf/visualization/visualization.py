@@ -55,7 +55,7 @@ def bar(df, title, xlabel="index", ylabel="count"):
     plt.show()
 
 
-def class_balance(df, class_name="code_s", visual=False, **kwargs):
+def class_balance(df, class_name="code_s", visual=False, sort=True, **kwargs):
     """
     check the class distribution
     Args:
@@ -66,20 +66,27 @@ def class_balance(df, class_name="code_s", visual=False, **kwargs):
         grouped data frame (infomation of class name and it's count)
     """
     if class_name.endswith("s"):
-        value = "desc_s_ko"
+        value = "desc_s"
     elif class_name.endswith("m"):
-        value = "desc_m_ko"
+        value = "desc_m"
     else:
-        value = "desc_l_ko"
+        value = "desc_l"
     mapping_dict = mapper(df, key=class_name, value=value)
     df = code_to_str(df)
-    df = (
-        df.groupby(class_name)
-        .count()
-        .reset_index()
-        .sort_values("path", ascending=False)
-        .reset_index(drop=True)
-    )
+    if sort:
+        df = (
+            df.groupby(class_name)
+            .count()
+            .reset_index()
+            .sort_values("path", ascending=False)
+            .reset_index(drop=True)
+        )
+    else:
+        df = (
+            df.groupby(class_name)
+            .count()
+            .reset_index()
+        )
     df = df[[class_name, "path"]].rename(columns={"path": "count"})
     df["ratio"] = df["count"].apply(lambda x: round((x / df["count"].sum()) * 100, 3))
     df["desc"] = df[class_name].apply(lambda x: mapping_dict[x])

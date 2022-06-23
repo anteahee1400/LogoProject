@@ -1,7 +1,7 @@
 datamodule:
   dataset:
-    data_path: /home/ubuntu/datasets/LOGO/Logo_retrieval/train_folder
-    label_path: /home/ubuntu/datasets/LOGO/Logo_retrieval/mini_3.csv
+    data_path: /home/ubuntu/datasets/LOGO/Logo_clf
+    label_path: /home/ubuntu/datasets/LOGO/Logo_clf/meta_mini_3.csv
     augmentations: 
       - transforms.RandomHorizontalFlip(p=1)
       - transforms.RandomVerticalFlip(p=1)
@@ -24,9 +24,10 @@ datamodule:
   
 lightning_module:
   model: 
-    name: efficientnet_b5_pretrained
+    name: vit_b16_imagenet1k
     kwargs:
       num_classes: 3
+      image_size: 416
     ckpt: null
   loss:
     name: torch.nn.CrossEntropyLoss

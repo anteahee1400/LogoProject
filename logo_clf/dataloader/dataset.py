@@ -22,7 +22,7 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
         num_classes: int = None,
         split: str = "train",
         random_split: bool = False,
-        label_col: str = "label_s",
+        label_col: str = "label",
         **kwargs,
     ):
         super().__init__()
@@ -38,7 +38,7 @@ class LogoDataset(Dataset, TensorTools, ImageTools):
         #     self.data_files = self.test_data
         # else:
         #     self.data_files = self.train_data
-        self.data_files = get_files_from_paths(self.data_path, "jpg")
+        self.data_files = get_files_from_paths([self.data_path / "train_folder", self.data_path / "test_folder", ], "jpg")
         self.label_path = label_path
         self.augmentations = parse_augmentation_texts(augmentations)
         self.transforms = parse_transform_texts(transforms)
